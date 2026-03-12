@@ -43,7 +43,7 @@ class DoctorController extends Controller
 
     public function show($id)
     {
-        $doctor = Doctor::with(['user', 'feedbacks', 'posts'])->findOrFail($id);
+        $doctor = Doctor::with(['user', 'feedbacks', 'posts','services'])->findOrFail($id);
         return response()->json($doctor);
     }
 

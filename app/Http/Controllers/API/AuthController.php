@@ -21,26 +21,22 @@ class AuthController extends Controller
      ======================= */
 
 
+
+
 public function login(Request $request)
 {
     Log::info('🟢 LOGIN HIT', [
         'ip' => $request->ip(),
-        'headers' => $request->headers->all(),
-        'payload' => $request->all(),
-        'guard' => config('auth.defaults.guard'),
+        'email' => $request->email,
     ]);
 
     $credentials = $request->only('email', 'password');
 
-    Log::info('🟡 CREDENTIALS RECIBIDAS', [
-        'email' => $credentials['email'] ?? null,
-        'password_length' => strlen($credentials['password'] ?? ''),
-    ]);
+    // Validar credenciales
+    if (!$token = auth()->attempt($credentials)) {
 
-    if (!Auth::attempt($credentials)) {
-        Log::error('🔴 AUTH::ATTEMPT FAILED', [
+        Log::warning('🔴 LOGIN FAILED', [
             'email' => $credentials['email'],
-            'user_exists' => \App\Models\User::where('email', $credentials['email'])->exists(),
         ]);
 
         return response()->json([
@@ -48,13 +44,21 @@ public function login(Request $request)
         ], 401);
     }
 
-    Log::info('✅ AUTH::ATTEMPT OK');
+    $user = auth()->user();
 
-    $user = Auth::user();
-    $token = auth()->login($user);
+    Log::info('✅ LOGIN OK', [
+        'user_id' => $user->id
+    ]);
 
-    Log::info('🎉 TOKEN GENERADO', [
-        'user_id' => $user->id,
+    /*
+    |--------------------------------------------------------------------------
+    | SOLO 1 DISPOSITIVO
+    |--------------------------------------------------------------------------
+    */
+
+    // Guardar token actual en la BD
+    $user->update([
+        'current_token' => $token
     ]);
 
     return response()->json([
@@ -64,7 +68,6 @@ public function login(Request $request)
         'user' => $user,
     ]);
 }
-
     /* =======================
             | REGISTER
     FILTRA POR VALOR IMPORTANTE PARA EL ROL     ======================= */

@@ -43,7 +43,7 @@ class LawyerController extends Controller
 
     public function show($id)
     {
-        $lawyer = Lawyer::with(['user', 'feedbacks', 'posts'])->findOrFail($id);
+        $lawyer = Lawyer::with(['user', 'feedbacks', 'posts','services'])->findOrFail($id);
         return response()->json($lawyer);
     }
 
