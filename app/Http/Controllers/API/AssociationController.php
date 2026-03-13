@@ -110,7 +110,7 @@ class AssociationController extends Controller
         try {
             $association = Association::with([
                 'user',
-                  'products',  
+                'products',  
                 'feedbacks.user',
                 'posts.comments',
                 'news'
@@ -193,7 +193,13 @@ class AssociationController extends Controller
     public function latest()
     {
         try {
-            $associations = Association::with(['user'])
+            $associations = Association::with([
+                'user',
+                'products',
+                'feedbacks.user',
+                'posts.comments',
+                'news'
+            ])
                 ->latest()
                 ->limit(5)
                 ->get();
