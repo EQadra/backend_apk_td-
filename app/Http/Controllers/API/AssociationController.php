@@ -21,7 +21,6 @@ class AssociationController extends Controller
                 'user',
                 'feedbacks',
                 'products',
-                'news',
                 'posts.comments'
             ])->paginate(10);
 
@@ -47,7 +46,7 @@ class AssociationController extends Controller
                 'user',
                 'feedbacks.user',
                 'posts.comments',
-                'news'
+                'products'
             ])->where('user_id', Auth::id())->firstOrFail();
 
             return response()->json($association);
@@ -112,8 +111,8 @@ class AssociationController extends Controller
                 'user',
                 'products',  
                 'feedbacks.user',
-                'posts.comments',
-                'news'
+                'posts.comments'
+
             ])->findOrFail($id);
 
             return response()->json($association);

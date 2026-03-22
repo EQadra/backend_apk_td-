@@ -5,56 +5,97 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Models\Product;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+use Exception;
 
 class ProductController extends Controller
 {
-    
+    // GET /api/products
     public function index()
     {
-        // Cargar shop + user + comments
         $products = Product::with([
-            'productable.user',   // Reemplaza store.user
-            'comments.user'       // Comentarios con usuario
+            'productable.user',
+            'comments.user'
         ])->latest()->get();
 
         return response()->json($products);
     }
 
-    public function store(Request $request)
-    {
+    // POST /api/products
+public function store(Request $request)
+{
+    try {
         $request->validate([
-            'store_id' => 'required|integer|exists:shops,id',
-            'name' => 'required|string|max:255',
+            'name'        => 'required|string|max:255',
             'description' => 'nullable|string',
-            'price' => 'required|numeric|min:0',
-            'image' => 'nullable|string',
-            'stock' => 'nullable|integer|min:0',
+            'price'       => 'required|numeric',
+            'stock'       => 'nullable|integer',
+            'image'       => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
+            'store_id'    => 'nullable|integer',
+            'association_id' => 'nullable|integer',
         ]);
 
-        // Crear producto polimórfico
+        $imageUrl = null;
+
+        // Subida de imagen
+        if ($request->hasFile('image')) {
+            $file = $request->file('image');
+            $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+            $destinationPath = public_path('imagenes_app/productos');
+            $file->move($destinationPath, $filename);
+
+            $imageUrl = "https://tudealer.app/imagenes_app/productos/" . $filename;
+        }
+
+        // Detectar si viene de Store o Association
+        if ($request->store_id) {
+            $productableType = 'App\Models\Store';
+            $productableId = $request->store_id;
+        } elseif ($request->association_id) {
+            $productableType = 'App\Models\Association';
+            $productableId = $request->association_id;
+        } else {
+            return response()->json(['error' => 'Debe enviar store_id o association_id'], 422);
+        }
+
         $product = Product::create([
-            'productable_id'   => $request->store_id,
-            'productable_type' => \App\Models\Shop::class,
+            'productable_type' => $productableType,
+            'productable_id'   => $productableId,
             'name'             => $request->name,
             'description'      => $request->description,
             'price'            => $request->price,
-            'image'            => $request->image,
             'stock'            => $request->stock,
+            'image'            => $imageUrl,
         ]);
 
-        return response()->json(['message' => 'Product created.', 'data' => $product], 201);
-    }
+        return response()->json([
+            'message' => 'Producto creado correctamente',
+            'data'    => $product
+        ], 201);
 
+    } catch (Exception $e) {
+        Log::error('Product store error: ' . $e->getMessage());
+
+        return response()->json([
+            'error' => 'Error al crear producto',
+            'message' => $e->getMessage()
+        ], 500);
+    }
+}
+
+    // GET /api/products/{id}
     public function show($id)
     {
         $product = Product::with([
-            'productable.user', // TIENDA + USUARIO
+            'productable.user',
             'comments.user'
         ])->findOrFail($id);
 
         return response()->json($product);
     }
 
+    // PUT /api/products/{id}
     public function update(Request $request, $id)
     {
         $product = Product::findOrFail($id);
@@ -63,6 +104,7 @@ class ProductController extends Controller
         return response()->json(['message' => 'Product updated.', 'data' => $product]);
     }
 
+    // DELETE /api/products/{id}
     public function destroy($id)
     {
         $product = Product::findOrFail($id);
@@ -72,17 +114,13 @@ class ProductController extends Controller
     }
 
     // GET /api/products/latest
-public function latest()
-{
-    $products = Product::with([
-        'productable.user', // tienda + usuario
-        'comments.user'
-    ])
-    ->latest()   // ORDER BY created_at DESC
-    ->limit(5)   // SOLO 5
-    ->get();
+    public function latest()
+    {
+        $products = Product::with([
+            'productable.user',
+            'comments.user'
+        ])->latest()->limit(5)->get();
 
-    return response()->json($products);
-}
-
+        return response()->json($products);
+    }
 }
