@@ -12,7 +12,11 @@ use Illuminate\Validation\ValidationException;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Support\Str;
-  use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Log;
+use App\Models\Association;
+use App\Models\Lawyer;
+use App\Models\Doctor;
+use App\Models\Shop;
 
 class AuthController extends Controller
 {
@@ -20,118 +24,122 @@ class AuthController extends Controller
      | LOGIN
      ======================= */
 
+    public function login(Request $request)
+    {
+        Log::info('🟢 LOGIN HIT', [
+            'ip' => $request->ip(),
+            'email' => $request->email,
+        ]);
 
+        $credentials = $request->only('email', 'password');
 
+        // Validar credenciales
+        if (!$token = auth()->attempt($credentials)) {
 
-public function login(Request $request)
-{
-    Log::info('🟢 LOGIN HIT', [
-        'ip' => $request->ip(),
-        'email' => $request->email,
-    ]);
+            Log::warning('🔴 LOGIN FAILED', [
+                'email' => $credentials['email'],
+            ]);
 
-    $credentials = $request->only('email', 'password');
+            return response()->json([
+                'message' => 'Credenciales incorrectas'
+            ], 401);
+        }
 
-    // Validar credenciales
-    if (!$token = auth()->attempt($credentials)) {
+        $user = auth()->user();
 
-        Log::warning('🔴 LOGIN FAILED', [
-            'email' => $credentials['email'],
+        Log::info('✅ LOGIN OK', [
+            'user_id' => $user->id
+        ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | SOLO 1 DISPOSITIVO
+        |--------------------------------------------------------------------------
+        */
+
+        // Guardar token actual en la BD
+        $user->update([
+            'current_token' => $token
         ]);
 
         return response()->json([
-            'message' => 'Credenciales incorrectas'
-        ], 401);
+            'access_token' => $token,
+            'token_type' => 'Bearer',
+            'expires_in' => auth()->factory()->getTTL() * 60,
+            'user' => $user,
+        ]);
     }
 
-    $user = auth()->user();
-
-    Log::info('✅ LOGIN OK', [
-        'user_id' => $user->id
-    ]);
-
-    /*
-    |--------------------------------------------------------------------------
-    | SOLO 1 DISPOSITIVO
-    |--------------------------------------------------------------------------
-    */
-
-    // Guardar token actual en la BD
-    $user->update([
-        'current_token' => $token
-    ]);
-
-    return response()->json([
-        'access_token' => $token,
-        'token_type' => 'Bearer',
-        'expires_in' => auth()->factory()->getTTL() * 60,
-        'user' => $user,
-    ]);
-}
     /* =======================
             | REGISTER
     FILTRA POR VALOR IMPORTANTE PARA EL ROL     ======================= */
-        public function register(Request $request)
-        {
-            $request->validate([
-                'name'     => 'required|string|max:255',
-                'email'    => 'required|email|unique:users,email',
-                'password' => 'required|confirmed|min:8',
+    
+    public function register(Request $request)
+    {
+        $request->validate([
+            'name'     => 'required|string|max:255',
+            'email'    => 'required|email|unique:users,email',
+            'password' => 'required|confirmed|min:8',
+        ]);
+
+        $user = User::create([
+            'name' => $request->name,
+            'email' => $request->email,
+            'password' => Hash::make($request->password),
+        ]);
+
+        // 🔍 DETECCIÓN POR CAMPO
+        if ($request->dni) {
+
+            // USUARIO NORMAL
+            $user->update(['dni' => $request->dni]);
+
+        } elseif ($request->licencia) {
+
+            Lawyer::create([
+                'user_id' => $user->id,
+                'license_code' => $request->licencia,
             ]);
 
-            $user = User::create([
-                'name' => $request->name,
-                'email' => $request->email,
-                'password' => Hash::make($request->password),
-            ]);
+        } elseif ($request->codigoDoctor) {
+         Doctor::create([
+            'user_id' => $user->id,
+            'first_name' => $request->first_name,
+            'last_name' => $request->last_name,
+            'degree' => $request->degree,
+            'specialty' => $request->specialty,
+            'graduation_code' => $request->codigoDoctor,
+        ]);
 
-            // 🔍 DETECCIÓN POR CAMPO
-            if ($request->dni) {
+        } elseif ($request->ruc) {
 
-                // USUARIO NORMAL
-                $user->update(['dni' => $request->dni]);
-
-            } elseif ($request->licencia) {
-
-                Lawyer::create([
+            if ($request->type === 'asociacion') {
+                Association::create([
                     'user_id' => $user->id,
-                    'license_code' => $request->licencia,
+                    'name' => $request->name,
+                    'ruc' => $request->ruc,
                 ]);
-
-            } elseif ($request->codigoDoctor) {
-
-                Doctor::create([
-                    'user_id' => $user->id,
-                    'graduate_code' => $request->codigoDoctor,
-                ]);
-
-            } elseif ($request->ruc) {
-
-                if ($request->type === 'asociacion') {
-                    Association::create([
-                        'user_id' => $user->id,
-                        'name' => $request->name,
-                        'ruc' => $request->ruc,
-                    ]);
-                }
-
-                if ($request->type === 'tienda') {
-                    Shop::create([
-                        'user_id' => $user->id,
-                        'name' => $request->name,
-                        'ruc' => $request->ruc,
-                    ]);
-                }
             }
 
-            $token = Auth::guard('api')->login($user);
-
-            return response()->json([
-                'message' => 'Registro exitoso',
-                'token' => $token,
-                'user' => $user
-            ], 201);
+            if ($request->type === 'tienda') {
+                Shop::create([
+                    'user_id' => $user->id,
+                    'name' => $request->name,
+                    'ruc' => $request->ruc,
+                ]);
+            }
         }
+
+        $token = Auth::guard('api')->login($user);
+
+      return response()->json([
+    'message' => 'Registro exitoso',
+    'access_token' => $token, // 🔥 FIX
+    'token_type' => 'Bearer',
+    'expires_in' => Auth::guard('api')->factory()->getTTL() * 60,
+        'user' => $user
+    ], 201);
+    }
 
 
     /* =======================
