@@ -12,205 +12,208 @@ use Exception;
 class AssociationController extends Controller
 {
     /**
-     * Display a listing of associations.
+     * LISTADO
      */
     public function index()
     {
         try {
-            $associations = Association::with([
+            return Association::with([
                 'user',
                 'feedbacks',
                 'products',
                 'posts.comments'
-            ])->paginate(10);
-
-            return response()->json($associations);
+            ])
+            ->latest()
+            ->paginate(10);
 
         } catch (Exception $e) {
-            Log::error('Association index error: '.$e->getMessage());
+            Log::error($e->getMessage());
+
             return response()->json([
-                'error' => 'Failed to load associations.',
-                'message' => $e->getMessage()
+                'message' => 'Error loading associations'
             ], 500);
         }
     }
 
     /**
-     * GET /api/associations/me
-     * Datos de la asociación del usuario logueado
+     * MI ASOCIACIÓN
      */
     public function me()
     {
         try {
-            $association = Association::with([
+            return Association::with([
                 'user',
                 'feedbacks.user',
                 'posts.comments',
                 'products'
-            ])->where('user_id', Auth::id())->firstOrFail();
-
-            return response()->json($association);
+            ])
+            ->where('user_id', Auth::id())
+            ->firstOrFail();
 
         } catch (Exception $e) {
-            Log::error('Association me error: '.$e->getMessage());
             return response()->json([
-                'error'   => 'Failed to load your association.',
-                'message' => $e->getMessage()
+                'message' => 'Association not found'
             ], 404);
         }
     }
 
     /**
-     * Store a newly created association.
+     * CREAR
      */
     public function store(Request $request)
     {
-        try {
-            $request->validate([
-                'name'        => 'required|string|max:255',
-                'description' => 'nullable|string',
-                'city'        => 'nullable|string|max:100',
-                'address'     => 'nullable|string|max:255',
-                'phone'       => 'nullable|string|max:20',
-                'image'       => 'nullable|string',
-                'website'     => 'nullable|string|max:255',
-            ]);
+        $request->validate([
+            'name'        => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'city'        => 'nullable|string|max:100',
+            'address'     => 'nullable|string|max:255',
+            'phone'       => 'nullable|string|max:20',
+            'image'       => 'nullable|string',
+            'website'     => 'nullable|string|max:255',
+        ]);
 
-            $association = Association::create([
-                'user_id'     => Auth::id(),
-                'name'        => $request->name,
-                'description' => $request->description,
-                'city'        => $request->city,
-                'address'     => $request->address,
-                'phone'       => $request->phone,
-                'image'       => $request->image,
-                'website'     => $request->website,
-            ]);
+        $exists = Association::where('user_id', Auth::id())->exists();
 
+        if ($exists) {
             return response()->json([
-                'message' => 'Association created successfully.',
-                'data'    => $association
-            ], 201);
-
-        } catch (Exception $e) {
-            Log::error('Association store error: '.$e->getMessage());
-            return response()->json([
-                'error'   => 'Failed to create association.',
-                'message' => $e->getMessage()
-            ], 500);
+                'message' => 'You already have an association'
+            ], 409);
         }
+
+        $association = Association::create([
+            'user_id'     => Auth::id(),
+            'name'        => $request->name,
+            'description' => $request->description,
+            'city'        => $request->city,
+            'address'     => $request->address,
+            'phone'       => $request->phone,
+            'image'       => $request->image,
+            'website'     => $request->website,
+        ]);
+
+        return response()->json($association, 201);
     }
 
     /**
-     * Display a specific association.
+     * VER
      */
     public function show($id)
     {
         try {
-            $association = Association::with([
+            return Association::with([
                 'user',
-                'products',  
+                'products',
                 'feedbacks.user',
                 'posts.comments'
-
             ])->findOrFail($id);
 
-            return response()->json($association);
-
         } catch (Exception $e) {
-            Log::error("Association show error (ID: $id): ".$e->getMessage());
             return response()->json([
-                'error'   => 'Failed to load association.',
-                'message' => $e->getMessage()
+                'message' => 'Association not found'
             ], 404);
         }
     }
 
     /**
-     * Update the specified association.
+     * ACTUALIZAR
      */
     public function update(Request $request, $id)
     {
-        try {
-            $association = Association::findOrFail($id);
+        $association = Association::findOrFail($id);
 
-            if ($association->user_id !== Auth::id() &&
-                !Auth::user()->hasRole('admin')) {
-                return response()->json(['error' => 'Unauthorized'], 403);
-            }
-
-            $association->update($request->only([
-                'name', 'description', 'city', 'address', 'phone', 'image', 'website'
-            ]));
-
-            return response()->json([
-                'message' => 'Association updated successfully.',
-                'data'    => $association
-            ]);
-
-        } catch (Exception $e) {
-            Log::error("Association update error (ID: $id): ".$e->getMessage());
-            return response()->json([
-                'error'   => 'Failed to update association.',
-                'message' => $e->getMessage()
-            ], 500);
+        if (
+            $association->user_id !== Auth::id() &&
+            !Auth::user()->hasRole('admin')
+        ) {
+            return response()->json(['message' => 'Unauthorized'], 403);
         }
+
+        $request->validate([
+            'name'        => 'sometimes|string|max:255',
+            'description' => 'nullable|string',
+            'city'        => 'nullable|string|max:100',
+            'address'     => 'nullable|string|max:255',
+            'phone'       => 'nullable|string|max:20',
+            'image'       => 'nullable|string',
+            'website'     => 'nullable|string|max:255',
+        ]);
+
+        $association->update($request->only([
+            'name',
+            'description',
+            'city',
+            'address',
+            'phone',
+            'image',
+            'website'
+        ]));
+
+        return response()->json([
+            'message' => 'Association updated',
+            'data' => $association
+        ]);
     }
 
     /**
-     * Remove the specified association.
+     * ELIMINAR
      */
     public function destroy($id)
     {
-        try {
-            $association = Association::findOrFail($id);
+        $association = Association::findOrFail($id);
 
-            if ($association->user_id !== Auth::id() &&
-                !Auth::user()->hasRole('admin')) {
-                return response()->json(['error' => 'Unauthorized'], 403);
-            }
-
-            $association->delete();
-
-            return response()->json([
-                'message' => 'Association deleted successfully.'
-            ]);
-
-        } catch (Exception $e) {
-            Log::error("Association delete error (ID: $id): ".$e->getMessage());
-            return response()->json([
-                'error'   => 'Failed to delete association.',
-                'message' => $e->getMessage()
-            ], 500);
+        if (
+            $association->user_id !== Auth::id() &&
+            !Auth::user()->hasRole('admin')
+        ) {
+            return response()->json(['message' => 'Unauthorized'], 403);
         }
+
+        $association->delete();
+
+        return response()->json([
+            'message' => 'Association deleted'
+        ]);
     }
 
     /**
-     * GET /api/associations/latest
-     * Home endpoint: solo 5 asociaciones más recientes
+     * ÚLTIMOS
      */
     public function latest()
     {
-        try {
-            $associations = Association::with([
-                'user',
-                'products',
-                'feedbacks.user',
-                'posts.comments',
-                'news'
-            ])
-                ->latest()
-                ->limit(5)
-                ->get();
+        return Association::with([
+            'user',
+            'products',
+            'feedbacks.user',
+            'posts.comments',
+            'news'
+        ])
+        ->latest()
+        ->take(5)
+        ->get();
+    }
 
-            return response()->json($associations);
+    /**
+     * 🔥 SOLO IMAGEN (IMPORTANTE PARA FRONTEND)
+     */
+    public function updateImage(Request $request, $id)
+    {
+        $request->validate([
+            'image' => 'required|string'
+        ]);
 
-        } catch (Exception $e) {
-            Log::error('Association latest error: '.$e->getMessage());
-            return response()->json([
-                'error' => 'Failed to load latest associations.',
-                'message' => $e->getMessage()
-            ], 500);
+        $association = Association::findOrFail($id);
+
+        if ($association->user_id !== Auth::id()) {
+            return response()->json(['message' => 'Unauthorized'], 403);
         }
+
+        $association->update([
+            'image' => $request->image
+        ]);
+
+        return response()->json([
+            'message' => 'Image updated successfully',
+            'image' => $association->image
+        ]);
     }
 }

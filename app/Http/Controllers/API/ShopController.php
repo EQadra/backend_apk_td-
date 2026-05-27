@@ -6,9 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Models\Shop;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use App\Traits\UploadProfileImage;
 
 class ShopController extends Controller
 {
+    use UploadProfileImage;
+
     public function index()
     {
         $shops = Shop::with([
@@ -30,7 +33,7 @@ class ShopController extends Controller
             'address' => 'nullable|string|max:255',
             'city' => 'nullable|string|max:100',
             'phone' => 'nullable|string|max:20',
-            'image' => 'nullable|string', // ✅ STRING
+            'image' => 'nullable|string',
             'schedule' => 'nullable|string',
         ]);
 
@@ -63,11 +66,26 @@ class ShopController extends Controller
         return response()->json($shop);
     }
 
+    public function me()
+    {
+        $shop = Shop::with([
+            'user',
+            'feedbacks',
+            'products',
+            'services',
+            'posts.comments'
+        ])
+        ->where('user_id', Auth::id())
+        ->firstOrFail();
+
+        return response()->json($shop);
+    }
+
     public function update(Request $request, $id)
     {
         $shop = Shop::findOrFail($id);
 
-        if ($shop->user_id !== Auth::id()) {
+        if ($shop->user_id !== Auth::id() && !Auth::user()->hasRole('admin')) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -77,7 +95,7 @@ class ShopController extends Controller
             'address' => 'nullable|string|max:255',
             'city' => 'nullable|string|max:100',
             'phone' => 'nullable|string|max:20',
-            'image' => 'nullable|string', // ✅ STRING
+            'image' => 'nullable|string',
             'schedule' => 'nullable|string',
         ]);
 
@@ -97,25 +115,19 @@ class ShopController extends Controller
         ]);
     }
 
-    public function me()
+    // 🔥 NUEVO: UPDATE SOLO IMAGEN
+    public function updateImage(Request $request)
     {
-        $shop = Shop::with([
-            'user',
-            'feedbacks',
-            'products',
-            'services'
-        ])
-        ->where('user_id', Auth::id())
-        ->firstOrFail();
+        $shop = Shop::where('user_id', Auth::id())->firstOrFail();
 
-        return response()->json($shop);
+        return $this->uploadImage($request, $shop, 'shops');
     }
 
     public function destroy($id)
     {
         $shop = Shop::findOrFail($id);
 
-        if ($shop->user_id !== Auth::id()) {
+        if ($shop->user_id !== Auth::id() && !Auth::user()->hasRole('admin')) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 

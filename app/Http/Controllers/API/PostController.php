@@ -4,78 +4,152 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use App\Models\Post;
+use App\Models\Doctor;
+use App\Models\Lawyer;
+use App\Models\Association;
+use App\Models\Shop;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class PostController extends Controller
 {
     /**
-     * List all posts.
+     * ===============================
+     * GET /api/posts
+     * Feed completo
+     * ===============================
      */
     public function index()
     {
-        $posts = Post::with(['user', 'comments'])->latest()->get();
+        $posts = Post::with([
+            'user',
+            'postable',
+            'comments.user'
+        ])
+        ->latest()
+        ->get();
+
         return response()->json($posts, 200);
     }
 
     /**
-     * Create a new post (for Doctor, Lawyer, or Association).
+     * ===============================
+     * POST /api/posts
+     * Crear post
+     * ===============================
      */
     public function store(Request $request)
     {
         $request->validate([
-            'title' => 'required|string|max:255',
-            'content' => 'required|string',
-            'image' => 'nullable|string',
+            'title'    => 'required|string|max:255',
+            'content'  => 'required|string',
+            'image'    => 'nullable|string',
             'category' => 'nullable|string|max:100',
         ]);
 
+        $user = Auth::user();
+
+        $postableType = null;
+        $postableId   = null;
+
+        /**
+         * Detectar si usuario tiene perfil negocio
+         */
+        if ($user->association) {
+            $postableType = Association::class;
+            $postableId   = $user->association->id;
+
+        } elseif ($user->doctor) {
+            $postableType = Doctor::class;
+            $postableId   = $user->doctor->id;
+
+        } elseif ($user->lawyer) {
+            $postableType = Lawyer::class;
+            $postableId   = $user->lawyer->id;
+
+        } elseif ($user->shop) {
+            $postableType = Shop::class;
+            $postableId   = $user->shop->id;
+        }
+
         $post = Post::create([
-            'user_id' => Auth::id(),
-            'title' => $request->title,
-            'content' => $request->content,
-            'image' => $request->image,
-            'category' => $request->category,
+            'user_id'       => $user->id,
+            'title'         => $request->title,
+            'content'       => $request->content,
+            'image'         => $request->image,
+            'category'      => $request->category,
+            'postable_type' => $postableType,
+            'postable_id'   => $postableId,
         ]);
 
         return response()->json([
-            'message' => 'Post successfully created.',
-            'data' => $post
+            'message' => 'Post creado correctamente',
+            'data'    => $post->load([
+                'user',
+                'postable',
+                'comments.user'
+            ])
         ], 201);
     }
 
     /**
-     * Display a specific post with comments.
+     * ===============================
+     * GET /api/posts/{id}
+     * Ver un post
+     * ===============================
      */
     public function show($id)
     {
-        $post = Post::with(['user', 'comments.user'])->findOrFail($id);
+        $post = Post::with([
+            'user',
+            'postable',
+            'comments.user'
+        ])->findOrFail($id);
+
         return response()->json($post, 200);
     }
-    // GET /api/posts/home
-public function home()
-{
-    $posts = Post::with(['user'])
+
+    /**
+     * ===============================
+     * GET /api/posts/home
+     * Últimos posts para home
+     * ===============================
+     */
+    public function home()
+    {
+        $posts = Post::with([
+            'user',
+            'postable'
+        ])
         ->latestForHome()
         ->get();
 
-    return response()->json($posts);
-}
-
+        return response()->json($posts, 200);
+    }
 
     /**
-     * Delete a post (owner or admin).
+     * ===============================
+     * DELETE /api/posts/{id}
+     * Eliminar post
+     * ===============================
      */
     public function destroy($id)
     {
         $post = Post::findOrFail($id);
 
-        if ($post->user_id !== Auth::id() && !Auth::user()->hasRole('admin')) {
-            return response()->json(['message' => 'Unauthorized'], 403);
+        if (
+            $post->user_id !== Auth::id() &&
+            !Auth::user()->hasRole('admin')
+        ) {
+            return response()->json([
+                'message' => 'No autorizado'
+            ], 403);
         }
 
         $post->delete();
 
-        return response()->json(['message' => 'Post deleted successfully.'], 200);
+        return response()->json([
+            'message' => 'Post eliminado correctamente'
+        ], 200);
     }
 }

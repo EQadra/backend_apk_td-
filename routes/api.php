@@ -1,8 +1,6 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use Illuminate\Http\Request;
-
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\UserRoleController;
@@ -24,18 +22,15 @@ use App\Http\Controllers\Api\NewsController;
 
 /*
 |--------------------------------------------------------------------------
-| AUTH (JWT)
+| AUTH
 |--------------------------------------------------------------------------
 */
 Route::prefix('auth')->group(function () {
-
-    // 🔓 Públicas
     Route::post('login', [AuthController::class, 'login']);
     Route::post('register', [AuthController::class, 'register']);
     Route::post('forgot-password', [AuthController::class, 'forgotPassword']);
     Route::post('reset-password', [AuthController::class, 'resetPassword']);
 
-    // 🔐 Protegidas JWT
     Route::middleware('auth:api')->group(function () {
         Route::get('me', [AuthController::class, 'me']);
         Route::post('logout', [AuthController::class, 'logout']);
@@ -44,10 +39,9 @@ Route::prefix('auth')->group(function () {
     });
 });
 
-
 /*
 |--------------------------------------------------------------------------
-| PROTECTED API (JWT)
+| PROTECTED API
 |--------------------------------------------------------------------------
 */
 Route::middleware('auth:api')->group(function () {
@@ -71,11 +65,10 @@ Route::middleware('auth:api')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
-    | ROLES & PERMISSIONS (ADMIN)
+    | ADMIN
     |--------------------------------------------------------------------------
     */
     Route::middleware('role:admin')->group(function () {
-
         Route::apiResource('roles', RoleController::class)->only(['index', 'store']);
         Route::apiResource('permissions', PermissionController::class);
 
@@ -89,7 +82,7 @@ Route::middleware('auth:api')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
-    | DASHBOARD & REPORTS
+    | DASHBOARD
     |--------------------------------------------------------------------------
     */
     Route::middleware('role:admin')->get('admin/dashboard', fn () =>
@@ -102,20 +95,50 @@ Route::middleware('auth:api')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
-    | CUSTOM ROUTES (SIEMPRE ANTES DE apiResource)
+    | IMAGE UPLOAD (TRAIT ENDPOINTS)
+    |--------------------------------------------------------------------------
+    | 👇 AQUÍ ESTÁ LO QUE TE FALTABA
+    |--------------------------------------------------------------------------
+    */
+    Route::post('doctors/upload-image/{id}', function (\Illuminate\Http\Request $request, $id) {
+        $doctor = \App\Models\Doctor::findOrFail($id);
+        return app(\App\Http\Controllers\Controller::class)
+            ->uploadImageByRole($request, $doctor);
+    });
+
+    Route::post('lawyers/upload-image/{id}', function (\Illuminate\Http\Request $request, $id) {
+        $lawyer = \App\Models\Lawyer::findOrFail($id);
+        return app(\App\Http\Controllers\Controller::class)
+            ->uploadImageByRole($request, $lawyer);
+    });
+
+    Route::post('shops/upload-image/{id}', function (\Illuminate\Http\Request $request, $id) {
+        $shop = \App\Models\Shop::findOrFail($id);
+        return app(\App\Http\Controllers\Controller::class)
+            ->uploadImageByRole($request, $shop);
+    });
+
+    Route::post('associations/upload-image/{id}', function (\Illuminate\Http\Request $request, $id) {
+        $association = \App\Models\Association::findOrFail($id);
+        return app(\App\Http\Controllers\Controller::class)
+            ->uploadImageByRole($request, $association);
+    });
+
+    /*
+    |--------------------------------------------------------------------------
+    | CUSTOM ROUTES
     |--------------------------------------------------------------------------
     */
 
-    // 🔹 Latest
+    // latest
     Route::get('associations/latest', [AssociationController::class, 'latest']);
     Route::get('doctors/latest', [DoctorController::class, 'latest']);
     Route::get('lawyers/latest', [LawyerController::class, 'latest']);
     Route::get('shops/latest', [ShopController::class, 'latest']);
     Route::get('products/latest', [ProductController::class, 'latest']);
     Route::get('services/latest', [ServiceController::class, 'latest']);
-    Route::get('news/latest', [NewsController::class, 'latest']);
 
-    // 🔹 Me
+    // me
     Route::get('associations/me', [AssociationController::class, 'me']);
     Route::get('doctors/me', [DoctorController::class, 'me']);
     Route::get('lawyers/me', [LawyerController::class, 'me']);
@@ -123,7 +146,7 @@ Route::middleware('auth:api')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
-    | API RESOURCES
+    | RESOURCES
     |--------------------------------------------------------------------------
     */
     Route::apiResource('associations', AssociationController::class);
@@ -132,10 +155,25 @@ Route::middleware('auth:api')->group(function () {
     Route::apiResource('products', ProductController::class);
     Route::apiResource('services', ServiceController::class);
     Route::apiResource('shops', ShopController::class);
+
+    Route::get('news/home', [NewsController::class, 'home']);
+    Route::get('news/latest', [NewsController::class, 'latest']);
+    Route::post('news/{id}/comments', [NewsController::class, 'addComment']);
     Route::apiResource('news', NewsController::class);
 
     Route::apiResource('comments', CommentController::class)->only(['index','store','show','destroy']);
     Route::apiResource('posts', PostController::class)->only(['index','store','show','destroy']);
     Route::apiResource('feedbacks', FeedbackController::class)->only(['index','store','show','destroy']);
+});
 
+/*
+|--------------------------------------------------------------------------
+| TEST
+|--------------------------------------------------------------------------
+*/
+Route::get('/test', function () {
+    return response()->json([
+        'status' => 'ok',
+        'message' => 'API funcionando'
+    ]);
 });

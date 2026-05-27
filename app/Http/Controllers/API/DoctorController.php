@@ -9,93 +9,193 @@ use Illuminate\Support\Facades\Auth;
 
 class DoctorController extends Controller
 {
+    /**
+     * LISTADO
+     */
     public function index()
     {
-        $doctors = Doctor::with([
-                'user',
-                'feedbacks.user',
-                'posts.comments',
-                'services' // 🔥 servicios
-            ])->latest()->get();
-        return response()->json($doctors);
+        return Doctor::with([
+            'user',
+            'feedbacks.user',
+            'posts.comments',
+            'services'
+        ])
+        ->latest()
+        ->get();
     }
 
+    /**
+     * CREAR
+     */
     public function store(Request $request)
     {
         $request->validate([
-            'first_name' => 'required|string|max:100',
-            'last_name' => 'required|string|max:100',
-            'description' => 'nullable|string',
-            'career' => 'nullable|string|max:255',
-            'specialty' => 'nullable|string|max:255',
-            'graduate_code' => 'nullable|string|max:50',
-            'services' => 'nullable|string',
-            'city' => 'nullable|string|max:100',
-            'university' => 'nullable|string|max:255',
-            'image' => 'nullable|string',
-            'schedule' => 'nullable|string',
+            'first_name'      => 'required|string|max:100',
+            'last_name'       => 'required|string|max:100',
+            'description'     => 'nullable|string',
+            'career'          => 'nullable|string|max:255',
+            'specialty'       => 'nullable|string|max:255',
+            'graduate_code'   => 'nullable|string|max:50',
+            'services'        => 'nullable|string',
+            'city'            => 'nullable|string|max:100',
+            'university'      => 'nullable|string|max:255',
+            'image'           => 'nullable|string',
+            'schedule'        => 'nullable|string',
         ]);
 
-        $doctor = Doctor::create(array_merge($request->all(), ['user_id' => Auth::id()]));
+        $doctor = Doctor::create([
+            'user_id'        => Auth::id(),
+            'first_name'     => $request->first_name,
+            'last_name'      => $request->last_name,
+            'description'    => $request->description,
+            'career'         => $request->career,
+            'specialty'      => $request->specialty,
+            'graduate_code'  => $request->graduate_code,
+            'services'       => $request->services,
+            'city'           => $request->city,
+            'university'     => $request->university,
+            'image'          => $request->image,
+            'schedule'       => $request->schedule,
+        ]);
 
-        return response()->json(['message' => 'Doctor created.', 'data' => $doctor], 201);
+        return response()->json($doctor, 201);
     }
 
+    /**
+     * VER
+     */
     public function show($id)
     {
-        $doctor = Doctor::with(['user', 'feedbacks', 'posts','services'])->findOrFail($id);
-        return response()->json($doctor);
+        return Doctor::with([
+            'user',
+            'feedbacks',
+            'posts',
+            'services'
+        ])->findOrFail($id);
     }
 
+    /**
+     * ACTUALIZAR
+     */
     public function update(Request $request, $id)
     {
+        $doctor = Doctor::findOrFail($id);
+
+        if (
+            $doctor->user_id !== Auth::id() &&
+            !Auth::user()->hasRole('admin')
+        ) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $request->validate([
+            'first_name'      => 'sometimes|string|max:100',
+            'last_name'       => 'sometimes|string|max:100',
+            'description'     => 'nullable|string',
+            'career'          => 'nullable|string|max:255',
+            'specialty'       => 'nullable|string|max:255',
+            'graduate_code'   => 'nullable|string|max:50',
+            'services'        => 'nullable|string',
+            'city'            => 'nullable|string|max:100',
+            'university'      => 'nullable|string|max:255',
+            'image'           => 'nullable|string',
+            'schedule'        => 'nullable|string',
+        ]);
+
+        $doctor->update($request->only([
+            'first_name',
+            'last_name',
+            'description',
+            'career',
+            'specialty',
+            'graduate_code',
+            'services',
+            'city',
+            'university',
+            'image',
+            'schedule'
+        ]));
+
+        return response()->json([
+            'message' => 'Doctor updated',
+            'data' => $doctor
+        ]);
+    }
+
+    /**
+     * MI PERFIL
+     */
+    public function me()
+    {
+        return Doctor::with([
+            'user',
+            'feedbacks',
+            'posts',
+            'services'
+        ])
+        ->where('user_id', Auth::id())
+        ->firstOrFail();
+    }
+
+    /**
+     * ÚLTIMOS
+     */
+    public function latest()
+    {
+        return Doctor::with([
+            'user',
+            'feedbacks.user',
+            'posts',
+            'services'
+        ])
+        ->latest()
+        ->take(3)
+        ->get();
+    }
+
+    /**
+     * ELIMINAR
+     */
+    public function destroy($id)
+    {
+        $doctor = Doctor::findOrFail($id);
+
+        if (
+            $doctor->user_id !== Auth::id() &&
+            !Auth::user()->hasRole('admin')
+        ) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $doctor->delete();
+
+        return response()->json([
+            'message' => 'Doctor deleted'
+        ]);
+    }
+
+    /**
+     * 🔥 SOLO IMAGEN
+     */
+    public function updateImage(Request $request, $id)
+    {
+        $request->validate([
+            'image' => 'required|string'
+        ]);
+
         $doctor = Doctor::findOrFail($id);
 
         if ($doctor->user_id !== Auth::id()) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        $doctor->update($request->all());
-        return response()->json(['message' => 'Doctor updated.', 'data' => $doctor]);
-    }
+        $doctor->update([
+            'image' => $request->image
+        ]);
 
-            // GET /api/doctors/me
-        public function me()
-        {
-            $doctor = Doctor::with(['user', 'feedbacks', 'posts'])
-                ->where('user_id', Auth::id())
-                ->firstOrFail();
-
-            return response()->json($doctor);
-        }
-
-        // GET /api/doctors/latest
-public function latest()
-{
-    $doctors = Doctor::with([
-            'user',
-            'feedbacks.user',
-            'posts',
-            'serviceItems'
-        ])
-        ->latest()
-        ->limit(3)
-        ->get();
-
-    return response()->json($doctors);
-}
-
-
-
-    public function destroy($id)
-    {
-        $doctor = Doctor::findOrFail($id);
-
-        if ($doctor->user_id !== Auth::id() && !Auth::user()->hasRole('admin')) {
-            return response()->json(['message' => 'Unauthorized'], 403);
-        }
-
-        $doctor->delete();
-        return response()->json(['message' => 'Doctor deleted.']);
+        return response()->json([
+            'message' => 'Image updated successfully',
+            'image' => $doctor->image
+        ]);
     }
 }

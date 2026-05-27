@@ -72,14 +72,18 @@ public function store(Request $request)
     /**
      * Home controller for home news item
      */
-    public function home()
+public function home()
 {
     return response()->json(
-        News::latest()->take(4)->get()
+        News::with([
+            'comments.user', // 🔥 comentarios con usuario
+            'newable.user'   // 🔥 dueño de la noticia
+        ])
+        ->orderBy('id', 'desc')
+        ->take(4)
+        ->get()
     );
 }
-
-
     /**
      * Update news
      */
@@ -120,6 +124,25 @@ public function latest()
     ->get();
 
     return response()->json($news);
+}
+
+public function addComment(Request $request, $id)
+{
+    $request->validate([
+        'content' => 'required|string|max:500'
+    ]);
+
+    $news = News::findOrFail($id);
+
+    $comment = $news->comments()->create([
+        'content' => $request->content,
+        'user_id' => Auth::id(),
+    ]);
+
+    return response()->json([
+        'message' => 'Comentario agregado',
+        'comment' => $comment->load('user')
+    ], 201);
 }
 
 }

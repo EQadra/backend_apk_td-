@@ -10,13 +10,15 @@ class Post extends Model
 {
     use HasFactory, BelongsToUser;
 
-    protected $fillable = [
-        'user_id',
-        'title',
-        'content',
-        'image',
-        'category',
-    ];
+protected $fillable = [
+    'user_id',
+    'title',
+    'content',
+    'image',
+    'category',
+    'postable_type',
+    'postable_id',
+];
 
     /**
      * Atributos calculados que se envían al JSON
@@ -104,4 +106,6 @@ class Post extends Model
     {
         return $query->where('category', $category);
     }
+
+    
 }
