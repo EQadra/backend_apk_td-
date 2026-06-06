@@ -145,11 +145,14 @@ class AuthController extends Controller
     /* =======================
      | ME
      ======================= */
-    public function me()
-    {
-        return response()->json(Auth::guard('api')->user());
-    }
+public function me()
+{
+    $user = $this->loadUserProfile(
+        Auth::guard('api')->user()
+    );
 
+    return response()->json($user);
+}
     /* =======================
      | LOGOUT
      ======================= */
@@ -240,13 +243,30 @@ class AuthController extends Controller
     /* =======================
      | RESPUESTA TOKEN
      ======================= */
-    protected function respondWithToken($token)
-    {
-        return response()->json([
-            'access_token' => $token,
-            'token_type'   => 'Bearer',
-            'expires_in'   => Auth::guard('api')->factory()->getTTL() * 60,
-            'user'         => Auth::guard('api')->user(),
-        ]);
-    }
+protected function respondWithToken($token)
+{
+    $user = $this->loadUserProfile(
+        Auth::guard('api')->user()
+    );
+
+    return response()->json([
+        'access_token' => $token,
+        'token_type'   => 'Bearer',
+        'expires_in'   => Auth::guard('api')->factory()->getTTL() * 60,
+        'user'         => $user,
+    ]);
+}
+
+ /* =======================
+     | loadUserProfile
+     ======================= */
+    private function loadUserProfile($user)
+{
+    return $user->load([
+        'doctor',
+        'lawyer',
+        'association',
+        'shop',
+    ]);
+}
 }

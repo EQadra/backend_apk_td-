@@ -6,9 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Models\Lawyer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use App\Models\Traits\UploadProfileImage;
 
 class LawyerController extends Controller
 {
+  use UploadProfileImage;
+
     public function index()
     {
         $lawyers = Lawyer::with([
@@ -149,4 +152,16 @@ class LawyerController extends Controller
 
         return response()->json(['message' => 'Lawyer deleted.']);
     }
+
+            public function updateImage(Request $request)
+        {
+            $lawyer = Lawyer::where('user_id', Auth::id())
+                ->firstOrFail();
+
+            return $this->uploadImage(
+                $request,
+                $lawyer,
+                'lawyers'
+            );
+        }
 }

@@ -9,8 +9,11 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Exception;
 
+use App\Models\Traits\UploadProfileImage;
+
 class AssociationController extends Controller
 {
+    use UploadProfileImage;
     /**
      * LISTADO
      */
@@ -195,25 +198,19 @@ class AssociationController extends Controller
     /**
      * 🔥 SOLO IMAGEN (IMPORTANTE PARA FRONTEND)
      */
-    public function updateImage(Request $request, $id)
-    {
-        $request->validate([
-            'image' => 'required|string'
-        ]);
 
-        $association = Association::findOrFail($id);
 
-        if ($association->user_id !== Auth::id()) {
-            return response()->json(['message' => 'Unauthorized'], 403);
-        }
+    public function updateImage(Request $request)
+{
+    $association = Association::where(
+        'user_id',
+        Auth::id()
+    )->firstOrFail();
 
-        $association->update([
-            'image' => $request->image
-        ]);
-
-        return response()->json([
-            'message' => 'Image updated successfully',
-            'image' => $association->image
-        ]);
-    }
+    return $this->uploadImage(
+        $request,
+        $association,
+        'associations'
+    );
+}
 }

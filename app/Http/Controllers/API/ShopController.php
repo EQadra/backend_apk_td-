@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Shop;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use App\Traits\UploadProfileImage;
+use App\Models\Traits\UploadProfileImage;
 
 class ShopController extends Controller
 {
@@ -118,11 +118,15 @@ class ShopController extends Controller
     // 🔥 NUEVO: UPDATE SOLO IMAGEN
     public function updateImage(Request $request)
     {
-        $shop = Shop::where('user_id', Auth::id())->firstOrFail();
+        $shop = Shop::where('user_id', Auth::id())
+            ->firstOrFail();
 
-        return $this->uploadImage($request, $shop, 'shops');
+        return $this->uploadImage(
+            $request,
+            $shop,
+            'shops'
+        );
     }
-
     public function destroy($id)
     {
         $shop = Shop::findOrFail($id);

@@ -6,9 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Models\Doctor;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use App\Models\Traits\UploadProfileImage;
 
 class DoctorController extends Controller
 {
+      use UploadProfileImage;
     /**
      * LISTADO
      */
@@ -177,25 +179,25 @@ class DoctorController extends Controller
     /**
      * 🔥 SOLO IMAGEN
      */
-    public function updateImage(Request $request, $id)
-    {
-        $request->validate([
-            'image' => 'required|string'
-        ]);
 
-        $doctor = Doctor::findOrFail($id);
+        // public function updateImage(Request $request)
+        // {
+        //     dd([
+        //         'all' => $request->all(),
+        //         'hasFile' => $request->hasFile('image'),
+        //         'files' => $request->allFiles(),
+        //     ]);
+        // }
 
-        if ($doctor->user_id !== Auth::id()) {
-            return response()->json(['message' => 'Unauthorized'], 403);
-        }
+    public function updateImage(Request $request)
+{
+    $doctor = Doctor::where('user_id', Auth::id())
+        ->firstOrFail();
 
-        $doctor->update([
-            'image' => $request->image
-        ]);
-
-        return response()->json([
-            'message' => 'Image updated successfully',
-            'image' => $doctor->image
-        ]);
-    }
+    return $this->uploadImage(
+        $request,
+        $doctor,
+        'doctors'
+    );
+}
 }

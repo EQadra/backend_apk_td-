@@ -49,7 +49,7 @@ class Doctor extends Model
     }
 
     // 🔥 Renombrada para evitar choque con atributo "services"
-    public function serviceItems()
+    public function services()
     {
         return $this->morphMany(Service::class, 'serviceable');
     }

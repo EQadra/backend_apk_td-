@@ -164,6 +164,41 @@ Route::middleware('auth:api')->group(function () {
     Route::apiResource('comments', CommentController::class)->only(['index','store','show','destroy']);
     Route::apiResource('posts', PostController::class)->only(['index','store','show','destroy']);
     Route::apiResource('feedbacks', FeedbackController::class)->only(['index','store','show','destroy']);
+
+
+    
+
+/*
+|--------------------------------------------------------------------------
+| actualización de imágenes (si quieres usar los endpoints específicos en cada controlador, puedes eliminar esta sección)
+|--------------------------------------------------------------------------
+*/
+    Route::post(
+        '/doctor/image',
+        [DoctorController::class, 'updateImage']
+    );
+
+    Route::post(
+        '/lawyer/image',
+        [LawyerController::class, 'updateImage']
+    );
+
+    Route::post(
+        '/association/image',
+        [AssociationController::class, 'updateImage']
+    );
+
+    Route::post(
+        '/shop/image',
+        [ShopController::class, 'updateImage']
+    );
+
+
+    /*
+|--------------------------------------------------------------------------
+| 
+|--------------------------------------------------------------------------
+*/
 });
 
 /*
@@ -177,3 +212,4 @@ Route::get('/test', function () {
         'message' => 'API funcionando'
     ]);
 });
+

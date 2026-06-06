@@ -1,19 +1,24 @@
 <?php
 
-namespace App\Traits;
+namespace App\Models\Traits;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
 trait UploadProfileImage
 {
-    public function uploadImageByRole(Request $request, $model)
+    public function uploadImage(Request $request, $model, $folder = 'profiles')
     {
         $request->validate([
-            'image' => 'required|image|max:5120',
+            'image' => 'required|image|mimes:jpg,jpeg,png,webp|max:5120',
         ]);
 
-        $path = $request->file('image')->store('profiles', 'public');
+        // eliminar imagen anterior
+        if ($model->image && Storage::disk('public')->exists($model->image)) {
+            Storage::disk('public')->delete($model->image);
+        }
+
+        $path = $request->file('image')->store($folder, 'public');
 
         $model->update([
             'image' => $path
@@ -21,7 +26,7 @@ trait UploadProfileImage
 
         return response()->json([
             'message' => 'Imagen actualizada correctamente',
-            'image' => $path
+            'image' => asset('storage/' . $path)
         ]);
     }
 }
