@@ -48,4 +48,15 @@ public function posts()
     return $this->morphMany(Post::class, 'postable');
 }
 
+protected $appends = ['image_url'];
+
+public function getImageUrlAttribute()
+{
+    if (!$this->image) {
+        return null;
+    }
+
+    return asset('storage/' . $this->image);
+}
+
 }

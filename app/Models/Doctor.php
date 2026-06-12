@@ -58,4 +58,15 @@ class Doctor extends Model
     {
         return $this->morphMany(News::class, 'newable');
     }
+
+    protected $appends = ['image_url'];
+
+public function getImageUrlAttribute()
+{
+    if (!$this->image) {
+        return null;
+    }
+
+    return asset('storage/' . $this->image);
+}
 }

@@ -107,5 +107,6 @@ protected $fillable = [
         return $query->where('category', $category);
     }
 
+
     
 }
