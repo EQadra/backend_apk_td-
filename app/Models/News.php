@@ -40,4 +40,14 @@ public function comments()
     {
         return $this->newable?->user;
     }
+
+    public function favorites()
+{
+    return $this->morphMany(Favorite::class, 'favoritable');
+}
+
+public function histories()
+{
+    return $this->morphMany(History::class, 'historyable');
+}
 }

@@ -5,6 +5,8 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Models\Service;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+
 
 class ServiceController extends Controller
 {
@@ -82,4 +84,21 @@ class ServiceController extends Controller
         return response()->json($services);
     }
 
+
+        public function myLatestServices()
+        {
+            $user = Auth::user();
+
+            $services = Service::with([
+                'serviceable',
+                'comments'
+            ])
+            ->where('serviceable_type', $user->role_to_model())
+            ->where('serviceable_id', $user->model()->id)
+            ->latest()
+            ->take(4)
+            ->get();
+
+            return response()->json($services);
+        }
 }

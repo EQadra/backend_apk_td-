@@ -199,6 +199,71 @@ Route::middleware('auth:api')->group(function () {
 | 
 |--------------------------------------------------------------------------
 */
+   /*
+    |--------------------------------------------------------------------------
+    | FAVORITES
+    |--------------------------------------------------------------------------
+    */
+
+    Route::post(
+        '/favorites/toggle',
+        [FavoriteController::class, 'toggle']
+    );
+
+    Route::get(
+        '/favorites/my',
+        [FavoriteController::class, 'myFavorites']
+    );
+
+    Route::get(
+        '/favorites/type/{type}',
+        [FavoriteController::class, 'byType']
+    );
+
+    Route::get(
+        '/favorites/check/{type}/{id}',
+        [FavoriteController::class, 'check']
+    );
+
+    /*
+    |--------------------------------------------------------------------------
+    | HISTORY
+    |--------------------------------------------------------------------------
+    */
+
+    Route::post(
+        '/history/store',
+        [HistoryController::class, 'store']
+    );
+
+    Route::get(
+        '/history/my',
+        [HistoryController::class, 'myHistory']
+    );
+
+    Route::get(
+        '/history/type/{type}',
+        [HistoryController::class, 'byType']
+    );
+
+    Route::get(
+        '/history/most-viewed/{type}',
+        [HistoryController::class, 'mostViewed']
+    );
+
+    Route::delete(
+        '/history/clear',
+        [HistoryController::class, 'clear']
+    );
+
+       /*
+    |--------------------------------------------------------------------------
+    | Lates
+    |--------------------------------------------------------------------------
+    */
+        Route::get('/my-news/latestNews', [NewsController::class, 'myLatestNews']);
+        Route::get('/my-posts/latestPosts', [PostController  ::class, 'myLatestPosts']);
+        Route::get('/my-services/latestServices', [ServiceController::class, 'myLatestServices']);
 });
 
 /*
@@ -212,4 +277,6 @@ Route::get('/test', function () {
         'message' => 'API funcionando'
     ]);
 });
+
+
 

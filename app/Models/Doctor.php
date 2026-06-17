@@ -61,12 +61,28 @@ class Doctor extends Model
 
     protected $appends = ['image_url'];
 
-public function getImageUrlAttribute()
-{
-    if (!$this->image) {
-        return null;
+    public function getImageUrlAttribute()
+    {
+        if (!$this->image) {
+            return null;
+        }
+
+        return asset('storage/' . $this->image);
     }
 
-    return asset('storage/' . $this->image);
+    public function comments()
+    {
+        return $this->hasMany(Comment::class);
+    }
+
+    
+public function favorites()
+{
+    return $this->morphMany(Favorite::class, 'favoritable');
+}
+
+public function histories()
+{
+    return $this->morphMany(History::class, 'historyable');
 }
 }

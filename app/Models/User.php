@@ -80,4 +80,30 @@ class User extends Authenticatable implements JWTSubject
     {
         return $this->hasMany(Feedback::class);
     }
+
+            public function posts()
+        {
+            return $this->hasMany(Post::class);
+        }
+
+            public function news()
+    {
+        return $this->morphMany(News::class, 'newable');
+    }
+
+    public function favorites()
+{
+    return $this->hasMany(Favorite::class);
+}
+
+public function histories()
+{
+    return $this->hasMany(History::class);
+}
+
+public function postsAsPostable()
+{
+    return $this->morphMany(Post::class, 'postable');
+}
+
 }

@@ -35,11 +35,11 @@ class NewsController extends Controller
      */
 public function store(Request $request)
 {
-    $request->validate([
-        'titulo' => 'required|string|max:255',
-        'descripcion' => 'required|string',
-        'image' => 'nullable|image|max:2048',
-    ]);
+   $request->validate([
+    'titulo' => 'required|string|max:255',
+    'descripcion' => 'required|string',
+    'url' => 'nullable|url',
+]);
 
     $user = Auth::user();
 
@@ -145,4 +145,21 @@ public function addComment(Request $request, $id)
     ], 201);
 }
 
+
+
+public function myLatestNews()
+{
+    $news = News::with([
+        'comments.user',
+        'newable',
+        'newable.user'
+    ])
+    ->where('newable_type', Auth::user()->role_to_model())
+    ->where('newable_id', Auth::user()->model()->id)
+    ->latest()
+    ->take(4)
+    ->get();
+
+    return response()->json($news);
+}
 }

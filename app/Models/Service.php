@@ -27,4 +27,14 @@ class Service extends Model
     {
         return $this->morphMany(Comment::class, 'commentable');
     }
+
+    public function favorites()
+{
+    return $this->morphMany(Favorite::class, 'favoritable');
+}
+
+public function histories()
+{
+    return $this->morphMany(History::class, 'historyable');
+}
 }

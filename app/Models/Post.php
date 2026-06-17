@@ -107,6 +107,14 @@ protected $fillable = [
         return $query->where('category', $category);
     }
 
+public function favorites()
+{
+    return $this->morphMany(Favorite::class, 'favoritable');
+}
 
+public function histories()
+{
+    return $this->morphMany(History::class, 'historyable');
+}
     
 }

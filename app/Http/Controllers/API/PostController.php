@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use App\Models\Post;
 use App\Models\Doctor;
 use App\Models\Lawyer;
@@ -43,44 +44,51 @@ class PostController extends Controller
         $request->validate([
             'title'    => 'required|string|max:255',
             'content'  => 'required|string',
-            'image'    => 'nullable|string',
+            'image' => 'nullable|image|max:4096',
             'category' => 'nullable|string|max:100',
         ]);
 
         $user = Auth::user();
 
-        $postableType = null;
-        $postableId   = null;
+        $postableType = User::class;
 
-        /**
-         * Detectar si usuario tiene perfil negocio
-         */
-        if ($user->association) {
-            $postableType = Association::class;
-            $postableId   = $user->association->id;
 
-        } elseif ($user->doctor) {
-            $postableType = Doctor::class;
-            $postableId   = $user->doctor->id;
+$postableType = User::class;
+$postableId   = $user->id;
 
-        } elseif ($user->lawyer) {
-            $postableType = Lawyer::class;
-            $postableId   = $user->lawyer->id;
+if ($user->association) {
+    $postableType = Association::class;
+    $postableId   = $user->association->id;
 
-        } elseif ($user->shop) {
-            $postableType = Shop::class;
-            $postableId   = $user->shop->id;
-        }
+} elseif ($user->doctor) {
+    $postableType = Doctor::class;
+    $postableId   = $user->doctor->id;
 
-        $post = Post::create([
-            'user_id'       => $user->id,
-            'title'         => $request->title,
-            'content'       => $request->content,
-            'image'         => $request->image,
-            'category'      => $request->category,
-            'postable_type' => $postableType,
-            'postable_id'   => $postableId,
-        ]);
+} elseif ($user->lawyer) {
+    $postableType = Lawyer::class;
+    $postableId   = $user->lawyer->id;
+
+} elseif ($user->shop) {
+    $postableType = Shop::class;
+    $postableId   = $user->shop->id;
+}
+        $imagePath = null;
+
+if ($request->hasFile('image')) {
+    $imagePath = $request
+        ->file('image')
+        ->store('posts', 'public');
+}
+
+$post = Post::create([
+    'user_id'       => $user->id,
+    'title'         => $request->title,
+    'content'       => $request->content,
+    'image'         => $imagePath,
+    'category'      => $request->category,
+    'postable_type' => $postableType,
+    'postable_id'   => $postableId,
+]);
 
         return response()->json([
             'message' => 'Post creado correctamente',
@@ -152,4 +160,19 @@ class PostController extends Controller
             'message' => 'Post eliminado correctamente'
         ], 200);
     }
+
+
+   public function myLatestPosts()
+{
+    return response()->json(
+        Auth::user()
+            ->posts()
+            ->with([
+                'user',
+                'postable'
+            ])
+            ->latest()
+            ->get()
+    );
+}
 }

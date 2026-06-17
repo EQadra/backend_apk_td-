@@ -55,4 +55,26 @@ public function getImageUrlAttribute()
     return asset('storage/' . $this->image);
 }
 
+    // 🔥 Renombrada para evitar choque con atributo "services"
+    public function services()
+    {
+        return $this->morphMany(Service::class, 'serviceable');
+    }
+
+
+    public function comments()
+    {
+        return $this->hasMany(Comment::class);
+    }
+
+    public function favorites()
+{
+    return $this->morphMany(Favorite::class, 'favoritable');
+}
+
+public function histories()
+{
+    return $this->morphMany(History::class, 'historyable');
+}
+
 }

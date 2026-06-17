@@ -28,4 +28,14 @@ class Product extends Model
     {
         return $this->morphMany(Comment::class, 'commentable');
     }
+
+    public function favorites()
+{
+    return $this->hasMany(Favorite::class);
+}
+
+public function histories()
+{
+    return $this->hasMany(History::class);
+}
 }
