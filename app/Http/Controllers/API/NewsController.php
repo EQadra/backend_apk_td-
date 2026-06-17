@@ -14,17 +14,20 @@ class NewsController extends Controller
      */
     public function index(Request $request)
     {
-        $query = News::query();
+        $query = News::with(['newable.user', 'comments.user']);
 
         if ($request->has('type')) {
-            $type = match($request->type) {
+            $type = match ($request->type) {
                 'doctor' => 'App\Models\Doctor',
                 'lawyer' => 'App\Models\Lawyer',
                 'shop' => 'App\Models\Shop',
                 'association' => 'App\Models\Association',
                 default => null
             };
-            if ($type) $query->where('newable_type', $type);
+
+            if ($type) {
+                $query->where('newable_type', $type);
+            }
         }
 
         return response()->json($query->latest()->get());
@@ -33,57 +36,54 @@ class NewsController extends Controller
     /**
      * Store a new news item
      */
-public function store(Request $request)
-{
-   $request->validate([
-    'titulo' => 'required|string|max:255',
-    'descripcion' => 'required|string',
-    'url' => 'nullable|url',
-]);
+        public function store(Request $request)
+        {
+            $request->validate([
+                'titulo' => 'required|string|max:255',
+                'descripcion' => 'required|string',
+                'url' => 'nullable|url',
+            ]);
 
-    $user = Auth::user();
+            $user = Auth::user();
 
-    $imagePath = null;
-    if ($request->hasFile('image')) {
-        $imagePath = $request->file('image')->store('news', 'public');
-    }
+            $news = $user->news()->create([
+                'titulo' => $request->titulo,
+                'descripcion' => $request->descripcion,
+                'url' => $request->url,
+                'fecha_publicacion' => now(),
+            ]);
 
-    $news = News::create([
-        'titulo' => $request->titulo,
-        'descripcion' => $request->descripcion,
-        'image' => $imagePath,
-        'fecha_publicacion' => now(),
-        'newable_type' => $user->role_to_model(),
-        'newable_id' => $user->model()->id,
-    ]);
-
-    return response()->json($news, 201);
-}
-
-
+            return response()->json([
+                'message' => 'Creado correctamente',
+                'data' => $news->load(['comments.user'])
+            ], 201);
+        }
     /**
-     * Show a single news item
+     * Show single news
      */
     public function show(News $news)
     {
-        return response()->json($news);
+        return response()->json(
+            $news->load(['newable.user', 'comments.user'])
+        );
     }
 
     /**
-     * Home controller for home news item
+     * Home news
      */
-public function home()
-{
-    return response()->json(
-        News::with([
-            'comments.user', // 🔥 comentarios con usuario
-            'newable.user'   // 🔥 dueño de la noticia
-        ])
-        ->orderBy('id', 'desc')
-        ->take(4)
-        ->get()
-    );
-}
+    public function home()
+    {
+        return response()->json(
+            News::with([
+                'comments.user',
+                'newable.user'
+            ])
+                ->latest()
+                ->take(4)
+                ->get()
+        );
+    }
+
     /**
      * Update news
      */
@@ -92,6 +92,7 @@ public function home()
         $request->validate([
             'titulo' => 'required|string|max:255',
             'descripcion' => 'required|string',
+            'url' => 'nullable|url',
         ]);
 
         $news->update([
@@ -100,7 +101,7 @@ public function home()
             'url' => $request->url ?? $news->url,
         ]);
 
-        return response()->json($news);
+        return response()->json($news->load(['newable.user', 'comments.user']));
     }
 
     /**
@@ -109,57 +110,61 @@ public function home()
     public function destroy(News $news)
     {
         $news->delete();
-        return response()->json(['message' => 'Deleted']);
+
+        return response()->json([
+            'message' => 'Deleted successfully'
+        ]);
     }
 
-    // GET /api/news/latest
-public function latest()
-{
-    $news = News::with([
-        'newable',       // doctor | lawyer | shop | association
-        'newable.user'   // usuario dueño
-    ])
-    ->latest()
-    ->limit(3)
-    ->get();
+    /**
+     * Latest news (global feed)
+     */
+    public function latest()
+    {
+        $news = News::with([
+            'newable.user',
+            'comments.user'
+        ])
+            ->latest()
+            ->limit(3)
+            ->get();
 
-    return response()->json($news);
-}
+        return response()->json($news);
+    }
 
-public function addComment(Request $request, $id)
-{
-    $request->validate([
-        'content' => 'required|string|max:500'
-    ]);
+    /**
+     * Add comment
+     */
+    public function addComment(Request $request, $id)
+    {
+        $request->validate([
+            'content' => 'required|string|max:500'
+        ]);
 
-    $news = News::findOrFail($id);
+        $news = News::findOrFail($id);
 
-    $comment = $news->comments()->create([
-        'content' => $request->content,
-        'user_id' => Auth::id(),
-    ]);
+        $comment = $news->comments()->create([
+            'content' => $request->content,
+            'user_id' => Auth::id(),
+        ]);
 
-    return response()->json([
-        'message' => 'Comentario agregado',
-        'comment' => $comment->load('user')
-    ], 201);
-}
+        return response()->json([
+            'message' => 'Comentario agregado',
+            'comment' => $comment->load('user')
+        ], 201);
+    }
 
+    /**
+     * My news (FIXED)
+     */
+        public function myLatestNews()
+        {
+            $user = Auth::user();
 
-
-public function myLatestNews()
-{
-    $news = News::with([
-        'comments.user',
-        'newable',
-        'newable.user'
-    ])
-    ->where('newable_type', Auth::user()->role_to_model())
-    ->where('newable_id', Auth::user()->model()->id)
-    ->latest()
-    ->take(4)
-    ->get();
-
-    return response()->json($news);
-}
+            return $user->news()
+                ->with(['comments.user'])
+                ->latest()
+                ->take(2)
+                ->get();
+        }
 }

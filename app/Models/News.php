@@ -22,7 +22,6 @@ class News extends Model
         'fecha_publicacion' => 'datetime',
     ];
 
-    protected $appends = ['user'];
 
     public function newable()
     {
@@ -35,11 +34,6 @@ public function comments()
     return $this->morphMany(\App\Models\Comment::class, 'commentable');
 }
 
-    // 🔥 usuario directo (para frontend)
-    public function getUserAttribute()
-    {
-        return $this->newable?->user;
-    }
 
     public function favorites()
 {

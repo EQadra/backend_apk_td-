@@ -106,4 +106,6 @@ public function postsAsPostable()
     return $this->morphMany(Post::class, 'postable');
 }
 
+
+
 }
