@@ -1,4 +1,5 @@
 <?php
+// app/Models/Post.php
 
 namespace App\Models;
 
@@ -10,27 +11,21 @@ class Post extends Model
 {
     use HasFactory, BelongsToUser;
 
-protected $fillable = [
-    'user_id',
-    'title',
-    'content',
-    'image',
-    'category',
-    'postable_type',
-    'postable_id',
-];
+    protected $fillable = [
+        'user_id',
+        'title',
+        'content',
+        'image',
+        'category',
+        'postable_type',
+        'postable_id',
+    ];
 
-    /**
-     * Atributos calculados que se envían al JSON
-     */
     protected $appends = [
         'image_url',
         'short_content',
     ];
 
-    /**
-     * Casts (por si luego agregas flags)
-     */
     protected $casts = [
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
@@ -40,7 +35,6 @@ protected $fillable = [
      | RELACIONES
      ======================= */
 
-    // Polimórfico
     public function postable()
     {
         return $this->morphTo();
@@ -56,20 +50,22 @@ protected $fillable = [
         return $this->morphMany(Comment::class, 'commentable');
     }
 
+    // ✅ RELACIÓN CON LIKES (AGREGAR ESTO)
+    public function likes()
+    {
+        return $this->morphMany(Like::class, 'likeable');
+    }
+
     /* =======================
      | ACCESSORS
      ======================= */
 
-    /**
-     * URL pública de la imagen
-     */
     public function getImageUrlAttribute()
     {
         if (!$this->image) {
             return null;
         }
 
-        // Soporta imágenes externas
         if (str_starts_with($this->image, 'http')) {
             return $this->image;
         }
@@ -77,9 +73,6 @@ protected $fillable = [
         return asset('storage/' . $this->image);
     }
 
-    /**
-     * Contenido corto para Home
-     */
     public function getShortContentAttribute()
     {
         return strlen($this->content) > 120
@@ -91,30 +84,24 @@ protected $fillable = [
      | SCOPES
      ======================= */
 
-    /**
-     * Últimos posts (ideal para Home)
-     */
     public function scopeLatestForHome($query, $limit = 4)
     {
         return $query->latest()->take($limit);
     }
 
-    /**
-     * Filtrar por categoría
-     */
     public function scopeCategory($query, $category)
     {
         return $query->where('category', $category);
     }
 
-public function favorites()
-{
-    return $this->morphMany(Favorite::class, 'favoritable');
-}
+    public function favorites()
+    {
+        return $this->morphMany(Favorite::class, 'favoritable');
+    }
 
-public function histories()
-{
-    return $this->morphMany(History::class, 'historyable');
-}
-    
+    public function histories()
+    {
+        return $this->morphMany(History::class, 'historyable');
+    }
+
 }

@@ -7,13 +7,11 @@ use App\Models\Service;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
-
 class ServiceController extends Controller
 {
     // Listar todos los servicios
     public function index()
     {
-        // Corregido: serviceable en lugar de serviciable
         $services = Service::with(['serviceable', 'comments'])->latest()->get();
         return response()->json($services);
     }
@@ -25,7 +23,7 @@ class ServiceController extends Controller
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
             'price' => 'required|numeric|min:0',
-            'duration' => 'nullable|string',
+            'duration' => 'nullable|numeric', // ✅ Cambiado de 'string' a 'numeric'
             'serviceable_type' => 'required|string',
             'serviceable_id' => 'required|integer',
         ]);
@@ -50,6 +48,13 @@ class ServiceController extends Controller
     {
         $service = Service::findOrFail($id);
 
+        $request->validate([
+            'name' => 'sometimes|required|string|max:255',
+            'description' => 'nullable|string',
+            'price' => 'sometimes|required|numeric|min:0',
+            'duration' => 'nullable|numeric', // ✅ Cambiado de 'string' a 'numeric'
+        ]);
+
         $service->update($request->all());
 
         return response()->json([
@@ -69,8 +74,7 @@ class ServiceController extends Controller
         ]);
     }
 
-
-        // 🔥 Home: últimos 5 servicios
+    // 🔥 Home: últimos 5 servicios
     public function latest()
     {
         $services = Service::with([
@@ -84,21 +88,20 @@ class ServiceController extends Controller
         return response()->json($services);
     }
 
+    public function myLatestServices()
+    {
+        $user = Auth::user();
 
-        public function myLatestServices()
-        {
-            $user = Auth::user();
+        $services = Service::with([
+            'serviceable',
+            'comments'
+        ])
+        ->where('serviceable_type', $user->role_to_model())
+        ->where('serviceable_id', $user->model()->id)
+        ->latest()
+        ->take(4)
+        ->get();
 
-            $services = Service::with([
-                'serviceable',
-                'comments'
-            ])
-            ->where('serviceable_type', $user->role_to_model())
-            ->where('serviceable_id', $user->model()->id)
-            ->latest()
-            ->take(4)
-            ->get();
-
-            return response()->json($services);
-        }
+        return response()->json($services);
+    }
 }

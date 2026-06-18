@@ -35,7 +35,6 @@ class AuthController extends Controller
 
         // Validar credenciales
         if (!$token = auth()->attempt($credentials)) {
-
             Log::warning('🔴 LOGIN FAILED', [
                 'email' => $credentials['email'],
             ]);
@@ -51,16 +50,13 @@ class AuthController extends Controller
             'user_id' => $user->id
         ]);
 
-        /*
-        |--------------------------------------------------------------------------
-        | SOLO 1 DISPOSITIVO
-        |--------------------------------------------------------------------------
-        */
-
-        // Guardar token actual en la BD
+        // SOLO 1 DISPOSITIVO
         $user->update([
             'current_token' => $token
         ]);
+
+        // Cargar perfiles del usuario
+        $user->load(['doctor', 'lawyer', 'association', 'shop']);
 
         return response()->json([
             'access_token' => $token,
@@ -71,8 +67,8 @@ class AuthController extends Controller
     }
 
     /* =======================
-            | REGISTER
-    FILTRA POR VALOR IMPORTANTE PARA EL ROL     ======================= */
+     | REGISTER
+     ======================= */
     
     public function register(Request $request)
     {
@@ -90,29 +86,23 @@ class AuthController extends Controller
 
         // 🔍 DETECCIÓN POR CAMPO
         if ($request->dni) {
-
             // USUARIO NORMAL
             $user->update(['dni' => $request->dni]);
-
         } elseif ($request->licencia) {
-
             Lawyer::create([
                 'user_id' => $user->id,
                 'license_code' => $request->licencia,
             ]);
-
         } elseif ($request->codigoDoctor) {
-         Doctor::create([
-            'user_id' => $user->id,
-            'first_name' => $request->first_name,
-            'last_name' => $request->last_name,
-            'degree' => $request->degree,
-            'specialty' => $request->specialty,
-            'graduation_code' => $request->codigoDoctor,
-        ]);
-
+            Doctor::create([
+                'user_id' => $user->id,
+                'first_name' => $request->first_name,
+                'last_name' => $request->last_name,
+                'degree' => $request->degree,
+                'specialty' => $request->specialty,
+                'graduation_code' => $request->codigoDoctor,
+            ]);
         } elseif ($request->ruc) {
-
             if ($request->type === 'asociacion') {
                 Association::create([
                     'user_id' => $user->id,
@@ -132,27 +122,37 @@ class AuthController extends Controller
 
         $token = Auth::guard('api')->login($user);
 
-      return response()->json([
-    'message' => 'Registro exitoso',
-    'access_token' => $token, // 🔥 FIX
-    'token_type' => 'Bearer',
-    'expires_in' => Auth::guard('api')->factory()->getTTL() * 60,
-        'user' => $user
-    ], 201);
-    }
+        // Cargar perfiles del usuario
+        $user->load(['doctor', 'lawyer', 'association', 'shop']);
 
+        return response()->json([
+            'message' => 'Registro exitoso',
+            'access_token' => $token,
+            'token_type' => 'Bearer',
+            'expires_in' => Auth::guard('api')->factory()->getTTL() * 60,
+            'user' => $user
+        ], 201);
+    }
 
     /* =======================
      | ME
      ======================= */
-public function me()
-{
-    $user = $this->loadUserProfile(
-        Auth::guard('api')->user()
-    );
+      public function me()
+    {
+        $user = Auth::guard('api')->user();
 
-    return response()->json($user);
-}
+        if (!$user) {
+            return response()->json([
+                'message' => 'Usuario no autenticado'
+            ], 401);
+        }
+
+        // Cargar perfiles del usuario con with
+        $user = User::with(['doctor', 'lawyer', 'association', 'shop'])->find($user->id);
+
+        return response()->json($user);
+    }
+    
     /* =======================
      | LOGOUT
      ======================= */
@@ -168,7 +168,15 @@ public function me()
      ======================= */
     public function refresh()
     {
-        return $this->respondWithToken(Auth::guard('api')->refresh());
+        $user = Auth::guard('api')->user();
+        $user->load(['doctor', 'lawyer', 'association', 'shop']);
+
+        return response()->json([
+            'access_token' => Auth::guard('api')->refresh(),
+            'token_type' => 'Bearer',
+            'expires_in' => Auth::guard('api')->factory()->getTTL() * 60,
+            'user' => $user,
+        ]);
     }
 
     /* =======================
@@ -227,7 +235,7 @@ public function me()
 
         $user = Auth::guard('api')->user();
 
-        if (! Hash::check($request->current_password, $user->password)) {
+        if (!Hash::check($request->current_password, $user->password)) {
             throw ValidationException::withMessages([
                 'current_password' => ['La contraseña actual no es correcta'],
             ]);
@@ -243,30 +251,16 @@ public function me()
     /* =======================
      | RESPUESTA TOKEN
      ======================= */
-protected function respondWithToken($token)
-{
-    $user = $this->loadUserProfile(
-        Auth::guard('api')->user()
-    );
+    protected function respondWithToken($token)
+    {
+        $user = Auth::guard('api')->user();
+        $user->load(['doctor', 'lawyer', 'association', 'shop']);
 
-    return response()->json([
-        'access_token' => $token,
-        'token_type'   => 'Bearer',
-        'expires_in'   => Auth::guard('api')->factory()->getTTL() * 60,
-        'user'         => $user,
-    ]);
-}
-
- /* =======================
-     | loadUserProfile
-     ======================= */
-    private function loadUserProfile($user)
-{
-    return $user->load([
-        'doctor',
-        'lawyer',
-        'association',
-        'shop',
-    ]);
-}
+        return response()->json([
+            'access_token' => $token,
+            'token_type'   => 'Bearer',
+            'expires_in'   => Auth::guard('api')->factory()->getTTL() * 60,
+            'user'         => $user,
+        ]);
+    }
 }

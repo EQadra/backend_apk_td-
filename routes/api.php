@@ -1,24 +1,27 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\Api\AuthController;
-use App\Http\Controllers\Api\UserController;
-use App\Http\Controllers\Api\UserRoleController;
-use App\Http\Controllers\Api\RoleController;
-use App\Http\Controllers\Api\PermissionController;
-use App\Http\Controllers\Api\RolePermissionController;
-use App\Http\Controllers\Api\UserPermissionController;
+use App\Http\Controllers\API\AuthController;
+use App\Http\Controllers\API\UserController;
+use App\Http\Controllers\API\UserRoleController;
+use App\Http\Controllers\API\RoleController;
+use App\Http\Controllers\API\PermissionController;
+use App\Http\Controllers\API\RolePermissionController;
+use App\Http\Controllers\API\UserPermissionController;
 
-use App\Http\Controllers\Api\AssociationController;
-use App\Http\Controllers\Api\CommentController;
-use App\Http\Controllers\Api\DoctorController;
-use App\Http\Controllers\Api\FeedbackController;
-use App\Http\Controllers\Api\LawyerController;
-use App\Http\Controllers\Api\PostController;
-use App\Http\Controllers\Api\ProductController;
-use App\Http\Controllers\Api\ServiceController;
-use App\Http\Controllers\Api\ShopController;
-use App\Http\Controllers\Api\NewsController;
+use App\Http\Controllers\API\AssociationController;
+use App\Http\Controllers\API\CommentController;
+use App\Http\Controllers\API\DoctorController;
+use App\Http\Controllers\API\FeedbackController;
+use App\Http\Controllers\API\LawyerController;
+use App\Http\Controllers\API\PostController;
+use App\Http\Controllers\API\ProductController;
+use App\Http\Controllers\API\ServiceController;
+use App\Http\Controllers\API\ShopController;
+use App\Http\Controllers\API\NewsController;
+
+use App\Http\Controllers\API\FavoriteController;
+use App\Http\Controllers\API\HistoryController;
 
 /*
 |--------------------------------------------------------------------------
@@ -97,8 +100,6 @@ Route::middleware('auth:api')->group(function () {
     |--------------------------------------------------------------------------
     | IMAGE UPLOAD (TRAIT ENDPOINTS)
     |--------------------------------------------------------------------------
-    | 👇 AQUÍ ESTÁ LO QUE TE FALTABA
-    |--------------------------------------------------------------------------
     */
     Route::post('doctors/upload-image/{id}', function (\Illuminate\Http\Request $request, $id) {
         $doctor = \App\Models\Doctor::findOrFail($id);
@@ -129,7 +130,6 @@ Route::middleware('auth:api')->group(function () {
     | CUSTOM ROUTES
     |--------------------------------------------------------------------------
     */
-
     // latest
     Route::get('associations/latest', [AssociationController::class, 'latest']);
     Route::get('doctors/latest', [DoctorController::class, 'latest']);
@@ -156,114 +156,121 @@ Route::middleware('auth:api')->group(function () {
     Route::apiResource('services', ServiceController::class);
     Route::apiResource('shops', ShopController::class);
 
-    Route::get('news/home', [NewsController::class, 'home']);
-    Route::get('news/latest', [NewsController::class, 'latest']);
-    Route::post('news/{id}/comments', [NewsController::class, 'addComment']);
-    Route::apiResource('news', NewsController::class);
+    /*
+    |--------------------------------------------------------------------------
+    | NEWS ROUTES - COMPLETAS CON LIKES ✅
+    |--------------------------------------------------------------------------
+    */
+    Route::prefix('news')->group(function () {
+        // 📌 Rutas públicas
+        Route::get('latest', [NewsController::class, 'latest']);
+        Route::get('home', [NewsController::class, 'home']);
+        Route::get('index', [NewsController::class, 'index']);
+        Route::get('{id}', [NewsController::class, 'show']);
+    });
 
-    Route::apiResource('comments', CommentController::class)->only(['index','store','show','destroy']);
-    Route::apiResource('posts', PostController::class)->only(['index','store','show','destroy']);
-    Route::apiResource('feedbacks', FeedbackController::class)->only(['index','store','show','destroy']);
-
-
-    
-
-/*
-|--------------------------------------------------------------------------
-| actualización de imágenes (si quieres usar los endpoints específicos en cada controlador, puedes eliminar esta sección)
-|--------------------------------------------------------------------------
-*/
-    Route::post(
-        '/doctor/image',
-        [DoctorController::class, 'updateImage']
-    );
-
-    Route::post(
-        '/lawyer/image',
-        [LawyerController::class, 'updateImage']
-    );
-
-    Route::post(
-        '/association/image',
-        [AssociationController::class, 'updateImage']
-    );
-
-    Route::post(
-        '/shop/image',
-        [ShopController::class, 'updateImage']
-    );
-
+    // 📌 Rutas protegidas (requieren autenticación)
+    Route::middleware('auth:api')->prefix('news')->group(function () {
+        // Noticias del usuario
+        Route::get('my/latest', [NewsController::class, 'myLatestNews']);
+        Route::get('my/all', [NewsController::class, 'myAllNews']);
+        Route::get('my/liked', [NewsController::class, 'myLikedNews']);
+        
+        // CRUD
+        Route::post('/', [NewsController::class, 'store']);
+        Route::put('{id}', [NewsController::class, 'update']);
+        Route::delete('{id}', [NewsController::class, 'destroy']);
+        
+        // Comentarios
+        Route::post('{id}/comments', [NewsController::class, 'addComment']);
+        
+        // Likes
+        Route::post('{id}/like', [NewsController::class, 'toggleLike']);
+        Route::get('{id}/check-like', [NewsController::class, 'checkLike']);
+        
+        // Depuración
+        Route::get('debug/{userId}', [NewsController::class, 'debugUserNews']);
+    });
 
     /*
-|--------------------------------------------------------------------------
-| 
-|--------------------------------------------------------------------------
-*/
-   /*
+    |--------------------------------------------------------------------------
+    | COMMENTS, POSTS, FEEDBACKS
+    |--------------------------------------------------------------------------
+    */
+    Route::apiResource('comments', CommentController::class)->only(['index', 'store', 'show', 'destroy']);
+    
+    // ⚠️ IMPORTANTE: Eliminar o comentar estas líneas para evitar duplicación
+    // Route::apiResource('posts', PostController::class)->only(['index', 'store', 'show', 'destroy']);
+    
+    Route::apiResource('feedbacks', FeedbackController::class)->only(['index', 'store', 'show', 'destroy']);
+
+    /*
+    |--------------------------------------------------------------------------
+    | POSTS ROUTES - COMPLETAS CON COMENTARIOS Y LIKES ✅
+    |--------------------------------------------------------------------------
+    */
+    // 📌 Rutas públicas para posts
+    Route::prefix('posts')->group(function () {
+        Route::get('/', [PostController::class, 'index']);
+        Route::get('/home', [PostController::class, 'home']);
+        Route::get('/search', [PostController::class, 'search']);
+        Route::get('/{id}', [PostController::class, 'show']);
+        Route::get('/{id}/likes', [PostController::class, 'getLikes']);
+    });
+
+    // 📌 Rutas protegidas para posts
+    Route::middleware('auth:api')->prefix('posts')->group(function () {
+        // CRUD
+        Route::post('/', [PostController::class, 'store']);
+        Route::put('/{id}', [PostController::class, 'update']);
+        Route::delete('/{id}', [PostController::class, 'destroy']);
+        
+        // Comentarios
+        Route::post('/{id}/comments', [PostController::class, 'addComment']);
+        Route::delete('/comments/{id}', [PostController::class, 'deleteComment']);
+        
+        // Likes
+        Route::post('/{id}/like', [PostController::class, 'toggleLike']);
+    });
+
+    /*
+    |--------------------------------------------------------------------------
+    | ACTUALIZACIÓN DE IMÁGENES
+    |--------------------------------------------------------------------------
+    */
+    Route::post('/doctor/image', [DoctorController::class, 'updateImage']);
+    Route::post('/lawyer/image', [LawyerController::class, 'updateImage']);
+    Route::post('/association/image', [AssociationController::class, 'updateImage']);
+    Route::post('/shop/image', [ShopController::class, 'updateImage']);
+
+    /*
     |--------------------------------------------------------------------------
     | FAVORITES
     |--------------------------------------------------------------------------
     */
-
-    Route::post(
-        '/favorites/toggle',
-        [FavoriteController::class, 'toggle']
-    );
-
-    Route::get(
-        '/favorites/my',
-        [FavoriteController::class, 'myFavorites']
-    );
-
-    Route::get(
-        '/favorites/type/{type}',
-        [FavoriteController::class, 'byType']
-    );
-
-    Route::get(
-        '/favorites/check/{type}/{id}',
-        [FavoriteController::class, 'check']
-    );
+    Route::post('/favorites/toggle', [FavoriteController::class, 'toggle']);
+    Route::get('/favorites/my', [FavoriteController::class, 'myFavorites']);
+    Route::get('/favorites/type/{type}', [FavoriteController::class, 'byType']);
+    Route::get('/favorites/check/{type}/{id}', [FavoriteController::class, 'check']);
 
     /*
     |--------------------------------------------------------------------------
     | HISTORY
     |--------------------------------------------------------------------------
     */
+    Route::post('/history/store', [HistoryController::class, 'store']);
+    Route::get('/history/my', [HistoryController::class, 'myHistory']);
+    Route::get('/history/type/{type}', [HistoryController::class, 'byType']);
+    Route::get('/history/most-viewed/{type}', [HistoryController::class, 'mostViewed']);
+    Route::delete('/history/clear', [HistoryController::class, 'clear']);
 
-    Route::post(
-        '/history/store',
-        [HistoryController::class, 'store']
-    );
-
-    Route::get(
-        '/history/my',
-        [HistoryController::class, 'myHistory']
-    );
-
-    Route::get(
-        '/history/type/{type}',
-        [HistoryController::class, 'byType']
-    );
-
-    Route::get(
-        '/history/most-viewed/{type}',
-        [HistoryController::class, 'mostViewed']
-    );
-
-    Route::delete(
-        '/history/clear',
-        [HistoryController::class, 'clear']
-    );
-
-       /*
+    /*
     |--------------------------------------------------------------------------
-    | Lates
+    | LATEST POSTS Y SERVICES
     |--------------------------------------------------------------------------
     */
-        Route::get('/my-news/latestNews', [NewsController::class, 'myLatestNews']);
-        Route::get('/my-posts/latestPosts', [PostController  ::class, 'myLatestPosts']);
-        Route::get('/my-services/latestServices', [ServiceController::class, 'myLatestServices']);
+    Route::get('/my-posts/latestPosts', [PostController::class, 'myLatestPosts']);
+    Route::get('/my-services/latestServices', [ServiceController::class, 'myLatestServices']);
 });
 
 /*
@@ -277,6 +284,3 @@ Route::get('/test', function () {
         'message' => 'API funcionando'
     ]);
 });
-
-
-
