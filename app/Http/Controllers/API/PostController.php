@@ -146,17 +146,31 @@ class PostController extends Controller
      * Últimos posts para home
      * ===============================
      */
-    public function home()
-    {
-        $posts = Post::with([
-            'user',
-            'postable'
-        ])
-        ->latestForHome()
-        ->get();
+   // PostController.php - home()
+public function home()
+{
+    $posts = Post::with([
+        'user',
+        'postable',
+        'comments.user' // ✅ Agregar esta línea
+    ])
+    ->withCount('likes as likes_count')
+    ->latestForHome()
+    ->get();
 
-        return response()->json($posts, 200);
+    // Verificar likes del usuario autenticado
+    $user = Auth::user();
+    if ($user) {
+        $posts->each(function ($post) use ($user) {
+            $post->liked = Like::where([
+                'user_id' => $user->id,
+                'likeable_type' => 'App\\Models\\Post',
+                'likeable_id' => $post->id
+            ])->exists();
+        });
     }
+    return response()->json($posts, 200);
+}
 
     /**
      * ===============================
