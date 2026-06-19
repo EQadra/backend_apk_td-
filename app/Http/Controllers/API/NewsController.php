@@ -284,140 +284,141 @@ class NewsController extends Controller
     /**
      * Obtener las últimas noticias del usuario autenticado
      */
-    public function myLatestNews()
-    {
-        $user = Auth::user();
-        
-        if (!$user) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Usuario no autenticado'
-            ], 401);
-        }
-
-        $user->load(['doctor', 'lawyer', 'shop', 'association']);
-
-        $conditions = [];
-
-        if ($user->doctor) {
-            $conditions[] = [
-                'newable_type' => 'App\\Models\\Doctor',
-                'newable_id' => $user->doctor->id
-            ];
-        }
-
-        if ($user->lawyer) {
-            $conditions[] = [
-                'newable_type' => 'App\\Models\\Lawyer',
-                'newable_id' => $user->lawyer->id
-            ];
-        }
-
-        if ($user->shop) {
-            $conditions[] = [
-                'newable_type' => 'App\\Models\\Shop',
-                'newable_id' => $user->shop->id
-            ];
-        }
-
-        if ($user->association) {
-            $conditions[] = [
-                'newable_type' => 'App\\Models\\Association',
-                'newable_id' => $user->association->id
-            ];
-        }
-
-        if (empty($conditions)) {
-            return response()->json([]);
-        }
-
-        $query = News::with(['newable', 'comments.user']);
-
-        foreach ($conditions as $index => $condition) {
-            if ($index === 0) {
-                $query->where('newable_type', $condition['newable_type'])
-                      ->where('newable_id', $condition['newable_id']);
-            } else {
-                $query->orWhere(function ($q) use ($condition) {
-                    $q->where('newable_type', $condition['newable_type'])
-                      ->where('newable_id', $condition['newable_id']);
-                });
-            }
-        }
-
-        $news = $query->latest('created_at')->take(5)->get();
-
-        return response()->json($news);
+     /**
+ * Obtener las últimas noticias del usuario autenticado
+ */
+public function myLatestNews()
+{
+    $user = Auth::user();
+    
+    if (!$user) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Usuario no autenticado'
+        ], 401);
     }
 
-    /**
-     * Obtener TODAS las noticias del usuario autenticado
-     */
-    public function myAllNews()
-    {
-        $user = Auth::user();
-        
-        if (!$user) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Usuario no autenticado'
-            ], 401);
-        }
+    $user->load(['doctor', 'lawyer', 'shop', 'association']);
 
-        $user->load(['doctor', 'lawyer', 'shop', 'association']);
+    // 🔥 CONSTRUIR CONDICIONES DE FORMA MÁS LIMPIA
+    $conditions = [];
 
-        $conditions = [];
-
-        if ($user->doctor) {
-            $conditions[] = [
-                'newable_type' => 'App\\Models\\Doctor',
-                'newable_id' => $user->doctor->id
-            ];
-        }
-
-        if ($user->lawyer) {
-            $conditions[] = [
-                'newable_type' => 'App\\Models\\Lawyer',
-                'newable_id' => $user->lawyer->id
-            ];
-        }
-
-        if ($user->shop) {
-            $conditions[] = [
-                'newable_type' => 'App\\Models\\Shop',
-                'newable_id' => $user->shop->id
-            ];
-        }
-
-        if ($user->association) {
-            $conditions[] = [
-                'newable_type' => 'App\\Models\\Association',
-                'newable_id' => $user->association->id
-            ];
-        }
-
-        if (empty($conditions)) {
-            return response()->json([]);
-        }
-
-        $query = News::with(['newable', 'comments.user']);
-
-        foreach ($conditions as $index => $condition) {
-            if ($index === 0) {
-                $query->where('newable_type', $condition['newable_type'])
-                      ->where('newable_id', $condition['newable_id']);
-            } else {
-                $query->orWhere(function ($q) use ($condition) {
-                    $q->where('newable_type', $condition['newable_type'])
-                      ->where('newable_id', $condition['newable_id']);
-                });
-            }
-        }
-
-        $news = $query->latest('created_at')->get();
-
-        return response()->json($news);
+    if ($user->doctor) {
+        $conditions[] = [
+            'newable_type' => 'App\\Models\\Doctor',
+            'newable_id' => $user->doctor->id
+        ];
     }
+
+    if ($user->lawyer) {
+        $conditions[] = [
+            'newable_type' => 'App\\Models\\Lawyer',
+            'newable_id' => $user->lawyer->id
+        ];
+    }
+
+    if ($user->shop) {
+        $conditions[] = [
+            'newable_type' => 'App\\Models\\Shop',
+            'newable_id' => $user->shop->id
+        ];
+    }
+
+    if ($user->association) {
+        $conditions[] = [
+            'newable_type' => 'App\\Models\\Association',
+            'newable_id' => $user->association->id
+        ];
+    }
+
+    if (empty($conditions)) {
+        return response()->json([]);
+    }
+
+    // ✅ CONSTRUCCIÓN CORRECTA CON WHERE + CLOSURE
+    $query = News::with(['newable', 'comments.user']);
+
+    $query->where(function ($q) use ($conditions) {
+        foreach ($conditions as $condition) {
+            $q->orWhere(function ($subQ) use ($condition) {
+                $subQ->where('newable_type', $condition['newable_type'])
+                     ->where('newable_id', $condition['newable_id']);
+            });
+        }
+    });
+
+    $news = $query->latest('created_at')->take(5)->get();
+
+    return response()->json($news);
+}
+
+/**
+ * Obtener TODAS las noticias del usuario autenticado
+ */
+public function myAllNews()
+{
+    $user = Auth::user();
+    
+    if (!$user) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Usuario no autenticado'
+        ], 401);
+    }
+
+    $user->load(['doctor', 'lawyer', 'shop', 'association']);
+
+    // 🔥 CONSTRUIR CONDICIONES DE FORMA MÁS LIMPIA
+    $conditions = [];
+
+    if ($user->doctor) {
+        $conditions[] = [
+            'newable_type' => 'App\\Models\\Doctor',
+            'newable_id' => $user->doctor->id
+        ];
+    }
+
+    if ($user->lawyer) {
+        $conditions[] = [
+            'newable_type' => 'App\\Models\\Lawyer',
+            'newable_id' => $user->lawyer->id
+        ];
+    }
+
+    if ($user->shop) {
+        $conditions[] = [
+            'newable_type' => 'App\\Models\\Shop',
+            'newable_id' => $user->shop->id
+        ];
+    }
+
+    if ($user->association) {
+        $conditions[] = [
+            'newable_type' => 'App\\Models\\Association',
+            'newable_id' => $user->association->id
+        ];
+    }
+
+    if (empty($conditions)) {
+        return response()->json([]);
+    }
+
+    // ✅ CONSTRUCCIÓN CORRECTA CON WHERE + CLOSURE
+    $query = News::with(['newable', 'comments.user']);
+
+    $query->where(function ($q) use ($conditions) {
+        foreach ($conditions as $condition) {
+            $q->orWhere(function ($subQ) use ($condition) {
+                $subQ->where('newable_type', $condition['newable_type'])
+                     ->where('newable_id', $condition['newable_id']);
+            });
+        }
+    });
+
+    $news = $query->latest('created_at')->get();
+
+    return response()->json($news);
+}
 
     /**
      * Método auxiliar para obtener el nombre de la tabla

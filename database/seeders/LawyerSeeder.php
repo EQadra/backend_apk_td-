@@ -10,12 +10,16 @@ class LawyerSeeder extends Seeder
 {
     public function run(): void
     {
-        $users = User::role('lawyer')->take(5)->get();
+        User::role('lawyer')->each(function ($user) {
+            $nameParts = explode(' ', $user->name, 2);
+            $firstName = $nameParts[0] ?? 'Abogado';
+            $lastName = $nameParts[1] ?? 'Default';
 
-        foreach ($users as $user) {
             Lawyer::factory()->create([
                 'user_id' => $user->id,
+                'first_name' => $firstName,
+                'last_name' => $lastName,
             ]);
-        }
+        });
     }
 }

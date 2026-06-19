@@ -220,7 +220,7 @@ Route::middleware('auth:api')->group(function () {
 
     // 📌 Rutas protegidas para posts
     Route::middleware('auth:api')->prefix('posts')->group(function () {
-        // CRUD
+        // CRUD 
         Route::post('/', [PostController::class, 'store']);
         Route::put('/{id}', [PostController::class, 'update']);
         Route::delete('/{id}', [PostController::class, 'destroy']);

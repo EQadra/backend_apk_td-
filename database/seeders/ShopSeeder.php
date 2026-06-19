@@ -10,12 +10,11 @@ class ShopSeeder extends Seeder
 {
     public function run(): void
     {
-        $users = User::role('shop')->take(5)->get();
-
-        foreach ($users as $user) {
+        User::role('shop')->each(function ($user) {
             Shop::factory()->create([
                 'user_id' => $user->id,
+                'name' => $user->name, // Usar el nombre del usuario
             ]);
-        }
+        });
     }
 }
