@@ -47,6 +47,12 @@ Route::prefix('auth')->group(function () {
 | PROTECTED API
 |--------------------------------------------------------------------------
 */
+
+Route::get('lawyers/search', [LawyerController::class, 'search']);
+Route::get('doctors/search', [DoctorController::class, 'search']);
+Route::get('associations/search', [AssociationController::class, 'search']);
+Route::get('shops/search', [ShopController::class, 'search']);
+
 Route::middleware('auth:api')->group(function () {
 
     /*
@@ -198,10 +204,6 @@ Route::middleware('auth:api')->group(function () {
     |--------------------------------------------------------------------------
     */
     Route::apiResource('comments', CommentController::class)->only(['index', 'store', 'show', 'destroy']);
-    
-    // ⚠️ IMPORTANTE: Eliminar o comentar estas líneas para evitar duplicación
-    // Route::apiResource('posts', PostController::class)->only(['index', 'store', 'show', 'destroy']);
-    
     Route::apiResource('feedbacks', FeedbackController::class)->only(['index', 'store', 'show', 'destroy']);
 
     /*
@@ -225,13 +227,28 @@ Route::middleware('auth:api')->group(function () {
         Route::put('/{id}', [PostController::class, 'update']);
         Route::delete('/{id}', [PostController::class, 'destroy']);
         
-        // Comentarios
+        // Comentarios de posts
         Route::post('/{id}/comments', [PostController::class, 'addComment']);
         Route::delete('/comments/{id}', [PostController::class, 'deleteComment']);
         
-        // Likes
+        // Likes de posts
         Route::post('/{id}/like', [PostController::class, 'toggleLike']);
     });
+
+    /*
+    |--------------------------------------------------------------------------
+    | PRODUCTS ROUTES - COMENTARIOS ✅ (CORREGIDO)
+    |--------------------------------------------------------------------------
+    */
+    // 📌 Rutas protegidas para comentarios de productos
+    Route::middleware('auth:api')->prefix('products')->group(function () {
+        // Comentarios de productos
+        Route::get('/{productId}/comments', [CommentController::class, 'getProductComments']);
+        Route::post('/{productId}/comments', [CommentController::class, 'storeProductComment']);
+    });
+
+    // Ruta para eliminar comentarios de productos (independiente del tipo)
+    Route::delete('/product-comments/{id}', [CommentController::class, 'deleteProductComment']);
 
     /*
     |--------------------------------------------------------------------------
@@ -275,7 +292,7 @@ Route::middleware('auth:api')->group(function () {
 
 /*
 |--------------------------------------------------------------------------
-| TEST
+| TEST 
 |--------------------------------------------------------------------------
 */
 Route::get('/test', function () {

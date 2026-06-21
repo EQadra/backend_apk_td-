@@ -153,4 +153,31 @@ class ShopController extends Controller
 
         return response()->json($shops);
     }
+
+     public function search(Request $request)
+    {
+        $query = $request->get('q');
+        
+        if (empty($query)) {
+            return response()->json([]);
+        }
+
+        $shops = Shop::with([
+            'user',
+            'posts'
+        ])
+        ->where(function($q) use ($query) {
+            $q->where('name', 'LIKE', "%{$query}%")
+              ->orWhere('name', 'LIKE', "%{$query}%")
+              ->orWhere('description', 'LIKE', "%{$query}%")
+              ->orWhere('address', 'LIKE', "%{$query}%")
+              ->orWhere('city', 'LIKE', "%{$query}%")
+              ->orWhere('phone', 'LIKE', "%{$query}%");
+        })
+        ->latest()
+        ->get();
+
+        return response()->json($shops);
+    }
+
 }

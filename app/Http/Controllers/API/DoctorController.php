@@ -10,7 +10,8 @@ use App\Models\Traits\UploadProfileImage;
 
 class DoctorController extends Controller
 {
-      use UploadProfileImage;
+    use UploadProfileImage;
+    
     /**
      * LISTADO
      */
@@ -177,27 +178,51 @@ class DoctorController extends Controller
     }
 
     /**
-     * 🔥 SOLO IMAGEN
+     * ACTUALIZAR IMAGEN
      */
-
-        // public function updateImage(Request $request)
-        // {
-        //     dd([
-        //         'all' => $request->all(),
-        //         'hasFile' => $request->hasFile('image'),
-        //         'files' => $request->allFiles(),
-        //     ]);
-        // }
-
     public function updateImage(Request $request)
-{
-    $doctor = Doctor::where('user_id', Auth::id())
-        ->firstOrFail();
+    {
+        $doctor = Doctor::where('user_id', Auth::id())
+            ->firstOrFail();
 
-    return $this->uploadImage(
-        $request,
-        $doctor,
-        'doctors'
-    );
+        return $this->uploadImage(
+            $request,
+            $doctor,
+            'doctors'
+        );
+    }
+
+    /**
+     * 🔍 BUSCAR DOCTORES
+     */
+   /**
+ * 🔍 BUSCAR DOCTORES
+ */
+public function search(Request $request)
+{
+    $query = $request->get('q');
+    
+    if (empty($query)) {
+        return response()->json([]);
+    }
+
+    $doctors = Doctor::with([
+        'user',
+        'services'
+    ])
+    ->where(function($q) use ($query) {
+        $q->where('first_name', 'LIKE', "%{$query}%")
+          ->orWhere('last_name', 'LIKE', "%{$query}%")
+          // Búsqueda por nombre completo
+          ->orWhereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$query}%"])
+          ->orWhere('specialty', 'LIKE', "%{$query}%")
+          ->orWhere('city', 'LIKE', "%{$query}%")
+          ->orWhere('university', 'LIKE', "%{$query}%")
+          ->orWhere('description', 'LIKE', "%{$query}%");
+    })
+    ->latest()
+    ->get();
+
+    return response()->json($doctors);
 }
 }

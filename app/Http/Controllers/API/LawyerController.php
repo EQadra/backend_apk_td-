@@ -164,4 +164,35 @@ class LawyerController extends Controller
                 'lawyers'
             );
         }
+
+         /**
+     * Buscar abogados por nombre, especialidad o ciudad
+     */
+    public function search(Request $request)
+    {
+        $query = $request->get('q');
+        
+        if (empty($query)) {
+            return response()->json([]);
+        }
+
+        $lawyers = Lawyer::with([
+            'user',
+            'services'
+        ])
+        ->where(function($q) use ($query) {
+            $q->where('first_name', 'LIKE', "%{$query}%")
+              ->orWhere('last_name', 'LIKE', "%{$query}%")
+              ->orWhere('specialty', 'LIKE', "%{$query}%")
+              ->orWhere('city', 'LIKE', "%{$query}%")
+              ->orWhere('university', 'LIKE', "%{$query}%")
+              ->orWhere('description', 'LIKE', "%{$query}%");
+        })
+        ->latest()
+        ->get();
+
+        return response()->json($lawyers);
+    }
+
+        
 }
