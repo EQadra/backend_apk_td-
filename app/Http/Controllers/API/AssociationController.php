@@ -14,6 +14,7 @@ use App\Models\Traits\UploadProfileImage;
 class AssociationController extends Controller
 {
     use UploadProfileImage;
+    
     /**
      * LISTADO
      */
@@ -196,26 +197,26 @@ class AssociationController extends Controller
     }
 
     /**
-     * 🔥 SOLO IMAGEN (IMPORTANTE PARA FRONTEND)
+     * ACTUALIZAR IMAGEN
      */
-
-
     public function updateImage(Request $request)
-{
-    $association = Association::where(
-        'user_id',
-        Auth::id()
-    )->firstOrFail();
+    {
+        $association = Association::where(
+            'user_id',
+            Auth::id()
+        )->firstOrFail();
 
-    return $this->uploadImage(
-        $request,
-        $association,
-        'associations'
-    );
-}
+        return $this->uploadImage(
+            $request,
+            $association,
+            'associations'
+        );
+    }
 
-
-     public function search(Request $request)
+    /**
+     * BÚSQUEDA - CORREGIDO
+     */
+    public function search(Request $request)
     {
         $query = $request->get('q');
         
@@ -223,13 +224,13 @@ class AssociationController extends Controller
             return response()->json([]);
         }
 
-        $shops = Association::with([
+        // ✅ CORREGIDO: Usar $associations en lugar de $shops
+        $associations = Association::with([
             'user',
             'posts'
         ])
         ->where(function($q) use ($query) {
             $q->where('name', 'LIKE', "%{$query}%")
-              ->orWhere('name', 'LIKE', "%{$query}%")
               ->orWhere('description', 'LIKE', "%{$query}%")
               ->orWhere('address', 'LIKE', "%{$query}%")
               ->orWhere('city', 'LIKE', "%{$query}%")
@@ -241,3 +242,4 @@ class AssociationController extends Controller
         return response()->json($associations);
     }
 }
+// ✅ FIN DEL ARCHIVO - NADA MÁS DESPUÉS DE ESTO

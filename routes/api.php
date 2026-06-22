@@ -44,14 +44,29 @@ Route::prefix('auth')->group(function () {
 
 /*
 |--------------------------------------------------------------------------
-| PROTECTED API
+| 🔥 RUTAS PÚBLICAS (NO REQUIEREN AUTENTICACIÓN)
 |--------------------------------------------------------------------------
 */
 
+// 🔥 BÚSQUEDAS - PÚBLICAS
 Route::get('lawyers/search', [LawyerController::class, 'search']);
 Route::get('doctors/search', [DoctorController::class, 'search']);
 Route::get('associations/search', [AssociationController::class, 'search']);
 Route::get('shops/search', [ShopController::class, 'search']);
+
+// 🔥 ÚLTIMOS (LATEST) - PÚBLICOS
+Route::get('associations/latest', [AssociationController::class, 'latest']);
+Route::get('doctors/latest', [DoctorController::class, 'latest']);
+Route::get('lawyers/latest', [LawyerController::class, 'latest']);
+Route::get('shops/latest', [ShopController::class, 'latest']);
+Route::get('products/latest', [ProductController::class, 'latest']);
+Route::get('services/latest', [ServiceController::class, 'latest']);
+
+/*
+|--------------------------------------------------------------------------
+| RUTAS PROTEGIDAS (REQUIEREN AUTENTICACIÓN)
+|--------------------------------------------------------------------------
+*/
 
 Route::middleware('auth:api')->group(function () {
 
@@ -133,18 +148,10 @@ Route::middleware('auth:api')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
-    | CUSTOM ROUTES
+    | CUSTOM ROUTES (PROTEGIDAS)
     |--------------------------------------------------------------------------
     */
-    // latest
-    Route::get('associations/latest', [AssociationController::class, 'latest']);
-    Route::get('doctors/latest', [DoctorController::class, 'latest']);
-    Route::get('lawyers/latest', [LawyerController::class, 'latest']);
-    Route::get('shops/latest', [ShopController::class, 'latest']);
-    Route::get('products/latest', [ProductController::class, 'latest']);
-    Route::get('services/latest', [ServiceController::class, 'latest']);
-
-    // me
+    // me (requieren autenticación)
     Route::get('associations/me', [AssociationController::class, 'me']);
     Route::get('doctors/me', [DoctorController::class, 'me']);
     Route::get('lawyers/me', [LawyerController::class, 'me']);
@@ -152,7 +159,7 @@ Route::middleware('auth:api')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
-    | RESOURCES
+    | RESOURCES (PROTEGIDAS)
     |--------------------------------------------------------------------------
     */
     Route::apiResource('associations', AssociationController::class);
@@ -169,6 +176,8 @@ Route::middleware('auth:api')->group(function () {
     */
     Route::prefix('news')->group(function () {
         // 📌 Rutas públicas
+            Route::get('/', [NewsController::class, 'index']);        // 🔥 AGREGAR ESTA
+
         Route::get('latest', [NewsController::class, 'latest']);
         Route::get('home', [NewsController::class, 'home']);
         Route::get('index', [NewsController::class, 'index']);
@@ -288,6 +297,7 @@ Route::middleware('auth:api')->group(function () {
     */
     Route::get('/my-posts/latestPosts', [PostController::class, 'myLatestPosts']);
     Route::get('/my-services/latestServices', [ServiceController::class, 'myLatestServices']);
+
 });
 
 /*
