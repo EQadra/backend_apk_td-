@@ -4,17 +4,16 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use App\Models\Shop;
+use App\Models\Traits\UploadImage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Exception;
 
-use App\Models\Traits\UploadProfileImage;
-
 class ShopController extends Controller
 {
-    use UploadProfileImage;
-    
+    use UploadImage;
+
     /**
      * LISTADO
      */
@@ -28,11 +27,10 @@ class ShopController extends Controller
                 'posts.comments'
             ])
             ->latest()
-            ->paginate(10);
+            ->get();
 
         } catch (Exception $e) {
             Log::error($e->getMessage());
-
             return response()->json([
                 'message' => 'Error loading shops'
             ], 500);
@@ -68,14 +66,13 @@ class ShopController extends Controller
     {
         $request->validate([
             'name'        => 'required|string|max:255',
+            'category'    => 'nullable|string|max:191',
             'description' => 'nullable|string',
-            'category'    => 'nullable|string|max:100',
             'address'     => 'nullable|string|max:255',
             'city'        => 'nullable|string|max:100',
             'phone'       => 'nullable|string|max:20',
-            'image'       => 'nullable|string',
-            'website'     => 'nullable|string|max:255',
-            'schedule'    => 'nullable|string',
+            'image'       => 'nullable|image|mimes:jpg,jpeg,png,webp|max:4096',
+            'schedule'    => 'nullable|string|max:191',
         ]);
 
         $exists = Shop::where('user_id', Auth::id())->exists();
@@ -86,20 +83,37 @@ class ShopController extends Controller
             ], 409);
         }
 
+        $imageUrl = null;
+
+        if ($request->hasFile('image')) {
+            $file = $request->file('image');
+            $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+            $destinationPath = '/home1/icjmeomy/apiapk.tudealer.app/public/imagenes_app/shops';
+            
+            if (!file_exists($destinationPath)) {
+                mkdir($destinationPath, 0755, true);
+            }
+            
+            $file->move($destinationPath, $filename);
+            $imageUrl = 'https://apiapk.tudealer.app/imagenes_app/shops/' . $filename;
+        }
+
         $shop = Shop::create([
             'user_id'     => Auth::id(),
             'name'        => $request->name,
-            'description' => $request->description,
             'category'    => $request->category,
+            'description' => $request->description,
             'address'     => $request->address,
             'city'        => $request->city,
             'phone'       => $request->phone,
-            'image'       => $request->image,
-            'website'     => $request->website,
+            'image'       => $imageUrl,
             'schedule'    => $request->schedule,
         ]);
 
-        return response()->json($shop, 201);
+        return response()->json([
+            'message' => 'Shop created',
+            'data' => $shop
+        ], 201);
     }
 
     /**
@@ -129,34 +143,49 @@ class ShopController extends Controller
     {
         $shop = Shop::findOrFail($id);
 
-        if (
-            $shop->user_id !== Auth::id() &&
-            !Auth::user()->hasRole('admin')
-        ) {
+        if ($shop->user_id !== Auth::id() && !Auth::user()->hasRole('admin')) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
         $request->validate([
             'name'        => 'sometimes|string|max:255',
+            'category'    => 'nullable|string|max:191',
             'description' => 'nullable|string',
-            'category'    => 'nullable|string|max:100',
             'address'     => 'nullable|string|max:255',
             'city'        => 'nullable|string|max:100',
             'phone'       => 'nullable|string|max:20',
-            'image'       => 'nullable|string',
-            'website'     => 'nullable|string|max:255',
-            'schedule'    => 'nullable|string',
+            'image'       => 'nullable|image|mimes:jpg,jpeg,png,webp|max:4096',
+            'schedule'    => 'nullable|string|max:191',
         ]);
+
+        if ($request->hasFile('image')) {
+            $this->deleteImageFromProduction($shop->image);
+            
+            $file = $request->file('image');
+            $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+            $destinationPath = '/home1/icjmeomy/apiapk.tudealer.app/public/imagenes_app/shops';
+            
+            if (!file_exists($destinationPath)) {
+                mkdir($destinationPath, 0755, true);
+            }
+            
+            $file->move($destinationPath, $filename);
+            $imageUrl = 'https://apiapk.tudealer.app/imagenes_app/shops/' . $filename;
+            
+            $shop->image = $imageUrl;
+        }
+
+        if ($request->has('image') && is_string($request->image)) {
+            $shop->image = $request->image;
+        }
 
         $shop->update($request->only([
             'name',
-            'description',
             'category',
+            'description',
             'address',
             'city',
             'phone',
-            'image',
-            'website',
             'schedule'
         ]));
 
@@ -173,12 +202,11 @@ class ShopController extends Controller
     {
         $shop = Shop::findOrFail($id);
 
-        if (
-            $shop->user_id !== Auth::id() &&
-            !Auth::user()->hasRole('admin')
-        ) {
+        if ($shop->user_id !== Auth::id() && !Auth::user()->hasRole('admin')) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
+
+        $this->deleteImageFromProduction($shop->image);
 
         $shop->delete();
 
@@ -208,12 +236,9 @@ class ShopController extends Controller
      */
     public function updateImage(Request $request)
     {
-        $shop = Shop::where(
-            'user_id',
-            Auth::id()
-        )->firstOrFail();
+        $shop = Shop::where('user_id', Auth::id())->firstOrFail();
 
-        return $this->uploadImage(
+        return $this->uploadImageToProduction(
             $request,
             $shop,
             'shops'
@@ -238,10 +263,10 @@ class ShopController extends Controller
         ->where(function($q) use ($query) {
             $q->where('name', 'LIKE', "%{$query}%")
               ->orWhere('description', 'LIKE', "%{$query}%")
-              ->orWhere('category', 'LIKE', "%{$query}%")
               ->orWhere('address', 'LIKE', "%{$query}%")
               ->orWhere('city', 'LIKE', "%{$query}%")
-              ->orWhere('phone', 'LIKE', "%{$query}%");
+              ->orWhere('phone', 'LIKE', "%{$query}%")
+              ->orWhere('category', 'LIKE', "%{$query}%");
         })
         ->latest()
         ->get();

@@ -11,17 +11,18 @@ use App\Models\Doctor;
 use App\Models\Lawyer;
 use App\Models\Association;
 use App\Models\Shop;
+use App\Models\Traits\UploadImage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
 
 class PostController extends Controller
 {
+    use UploadImage;
+
     /**
-     * ===============================
      * GET /api/posts
      * Feed completo
-     * ===============================
      */
     public function index()
     {
@@ -34,7 +35,6 @@ class PostController extends Controller
         ->latest()
         ->get();
 
-        // Verificar si el usuario autenticado dio like
         $user = Auth::user();
         if ($user) {
             $posts->each(function ($post) use ($user) {
@@ -50,17 +50,15 @@ class PostController extends Controller
     }
 
     /**
-     * ===============================
      * POST /api/posts
      * Crear post
-     * ===============================
      */
     public function store(Request $request)
     {
         $request->validate([
             'title'    => 'required|string|max:255',
             'content'  => 'required|string',
-            'image' => 'nullable|image|max:4096',
+            'image'    => 'nullable|image|mimes:jpg,jpeg,png,webp|max:4096',
             'category' => 'nullable|string|max:100',
         ]);
 
@@ -83,19 +81,27 @@ class PostController extends Controller
             $postableId   = $user->shop->id;
         }
 
-        $imagePath = null;
+        $imageUrl = null;
 
+        // 🔥 SUBIR IMAGEN usando el método del trait
         if ($request->hasFile('image')) {
-            $imagePath = $request
-                ->file('image')
-                ->store('posts', 'public');
+            $file = $request->file('image');
+            $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+            $destinationPath = '/home1/icjmeomy/apiapk.tudealer.app/public/imagenes_app/posts';
+            
+            if (!file_exists($destinationPath)) {
+                mkdir($destinationPath, 0755, true);
+            }
+            
+            $file->move($destinationPath, $filename);
+            $imageUrl = 'https://apiapk.tudealer.app/imagenes_app/posts/' . $filename;
         }
 
         $post = Post::create([
             'user_id'       => $user->id,
             'title'         => $request->title,
             'content'       => $request->content,
-            'image'         => $imagePath,
+            'image'         => $imageUrl,
             'category'      => $request->category,
             'postable_type' => $postableType,
             'postable_id'   => $postableId,
@@ -112,10 +118,8 @@ class PostController extends Controller
     }
 
     /**
-     * ===============================
      * GET /api/posts/{id}
      * Ver un post
-     * ===============================
      */
     public function show($id)
     {
@@ -127,7 +131,6 @@ class PostController extends Controller
         ->withCount('likes as likes_count')
         ->findOrFail($id);
 
-        // Verificar si el usuario autenticado dio like
         $user = Auth::user();
         if ($user) {
             $post->liked = Like::where([
@@ -141,55 +144,51 @@ class PostController extends Controller
     }
 
     /**
-     * ===============================
      * GET /api/posts/home
      * Últimos posts para home
-     * ===============================
      */
-   // PostController.php - home()
-public function home()
-{
-    $posts = Post::with([
-        'user',
-        'postable',
-        'comments.user' // ✅ Agregar esta línea
-    ])
-    ->withCount('likes as likes_count')
-    ->latestForHome()
-    ->get();
+    public function home()
+    {
+        $posts = Post::with([
+            'user',
+            'postable',
+            'comments.user'
+        ])
+        ->withCount('likes as likes_count')
+        ->latest()
+        ->take(4)
+        ->get();
 
-    // Verificar likes del usuario autenticado
-    $user = Auth::user();
-    if ($user) {
-        $posts->each(function ($post) use ($user) {
-            $post->liked = Like::where([
-                'user_id' => $user->id,
-                'likeable_type' => 'App\\Models\\Post',
-                'likeable_id' => $post->id
-            ])->exists();
-        });
+        $user = Auth::user();
+        if ($user) {
+            $posts->each(function ($post) use ($user) {
+                $post->liked = Like::where([
+                    'user_id' => $user->id,
+                    'likeable_type' => 'App\\Models\\Post',
+                    'likeable_id' => $post->id
+                ])->exists();
+            });
+        }
+
+        return response()->json($posts, 200);
     }
-    return response()->json($posts, 200);
-}
 
     /**
-     * ===============================
      * DELETE /api/posts/{id}
      * Eliminar post
-     * ===============================
      */
     public function destroy($id)
     {
         $post = Post::findOrFail($id);
 
-        if (
-            $post->user_id !== Auth::id() &&
-            !Auth::user()->hasRole('admin')
-        ) {
+        if ($post->user_id !== Auth::id() && !Auth::user()->hasRole('admin')) {
             return response()->json([
                 'message' => 'No autorizado'
             ], 403);
         }
+
+        // 🔥 Eliminar imagen usando el trait
+        $this->deleteImageFromProduction($post->image);
 
         // Eliminar comentarios y likes asociados
         $post->comments()->delete();
@@ -202,10 +201,8 @@ public function home()
     }
 
     /**
-     * ===============================
      * GET /api/posts/my
      * Mis posts
-     * ===============================
      */
     public function myLatestPosts()
     {
@@ -222,10 +219,8 @@ public function home()
     }
 
     /**
-     * ===============================
      * POST /api/posts/{id}/comments
      * Agregar comentario a un post
-     * ===============================
      */
     public function addComment(Request $request, $id)
     {
@@ -266,10 +261,8 @@ public function home()
     }
 
     /**
-     * ===============================
      * DELETE /api/posts/comments/{id}
      * Eliminar comentario
-     * ===============================
      */
     public function deleteComment($id)
     {
@@ -282,7 +275,6 @@ public function home()
             ], 404);
         }
 
-        // Verificar que el usuario sea el dueño del comentario
         if ($comment->user_id !== Auth::id() && !Auth::user()->hasRole('admin')) {
             return response()->json([
                 'success' => false,
@@ -299,10 +291,8 @@ public function home()
     }
 
     /**
-     * ===============================
      * POST /api/posts/{id}/like
      * Dar like o quitar like (toggle)
-     * ===============================
      */
     public function toggleLike($id)
     {
@@ -316,7 +306,6 @@ public function home()
             ], 404);
         }
 
-        // Verificar si ya existe el like
         $existingLike = Like::where([
             'user_id' => $user->id,
             'likeable_type' => 'App\\Models\\Post',
@@ -324,7 +313,6 @@ public function home()
         ])->first();
 
         if ($existingLike) {
-            // Si ya existe, lo eliminamos (quitamos like)
             $existingLike->delete();
             $likesCount = $post->likes()->count();
 
@@ -338,7 +326,6 @@ public function home()
                 ]
             ]);
         } else {
-            // Si no existe, lo creamos (damos like)
             $like = Like::create([
                 'user_id' => $user->id,
                 'likeable_type' => 'App\\Models\\Post',
@@ -361,10 +348,8 @@ public function home()
     }
 
     /**
-     * ===============================
      * GET /api/posts/{id}/likes
      * Obtener likes de un post
-     * ===============================
      */
     public function getLikes($id)
     {
@@ -395,10 +380,8 @@ public function home()
     }
 
     /**
-     * ===============================
      * GET /api/posts/search
      * Buscar posts
-     * ===============================
      */
     public function search(Request $request)
     {

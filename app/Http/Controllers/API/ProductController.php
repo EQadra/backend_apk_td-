@@ -4,15 +4,18 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use App\Models\Product;
+use App\Models\Traits\UploadImage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 use Exception;
 
 class ProductController extends Controller
 {
+    use UploadImage;
+
     /** 
      * GET /api/products
+     * Listar todos los productos
      */
     public function index()
     {
@@ -26,6 +29,7 @@ class ProductController extends Controller
 
     /**
      * POST /api/products
+     * Crear un nuevo producto
      */
     public function store(Request $request)
     {
@@ -42,41 +46,27 @@ class ProductController extends Controller
 
             $imageUrl = null;
 
-            /**
-             * SUBIR IMAGEN
-             * Guarda en:
-             * /public/imagenes_app/productos
-             */
-         if ($request->hasFile('image')) {
-        
-            $file = $request->file('image');
-        
-            $filename = time().'_'.uniqid().'.'.$file->getClientOriginalExtension();
-        
-            $destinationPath = '/home1/icjmeomy/apiapk.tudealer.app/public/imagenes_app/productos';
-        
-            if (!file_exists($destinationPath)) {
-                mkdir($destinationPath, 0755, true);
+            // 🔥 SUBIR IMAGEN usando el método del trait
+            if ($request->hasFile('image')) {
+                $file = $request->file('image');
+                $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+                $destinationPath = '/home1/icjmeomy/apiapk.tudealer.app/public/imagenes_app/productos';
+                
+                if (!file_exists($destinationPath)) {
+                    mkdir($destinationPath, 0755, true);
+                }
+                
+                $file->move($destinationPath, $filename);
+                $imageUrl = 'https://apiapk.tudealer.app/imagenes_app/productos/' . $filename;
             }
-        
-            $file->move($destinationPath, $filename);
-        
-            $imageUrl = 'https://apiapk.tudealer.app/imagenes_app/productos/'.$filename;
-        }
 
-            /**
-             * Detectar dueño del producto
-             */
+            // Detectar dueño del producto
             if ($request->store_id) {
-
                 $productableType = 'App\Models\Shop';
                 $productableId   = $request->store_id;
-
             } elseif ($request->association_id) {
-
                 $productableType = 'App\Models\Association';
                 $productableId   = $request->association_id;
-
             } else {
                 return response()->json([
                     'error' => 'Debe enviar store_id o association_id'
@@ -99,9 +89,7 @@ class ProductController extends Controller
             ], 201);
 
         } catch (Exception $e) {
-
             Log::error('Product store error: ' . $e->getMessage());
-
             return response()->json([
                 'error'   => 'Error al crear producto',
                 'message' => $e->getMessage()
@@ -111,6 +99,7 @@ class ProductController extends Controller
 
     /**
      * GET /api/products/{id}
+     * Mostrar un producto específico
      */
     public function show($id)
     {
@@ -124,6 +113,7 @@ class ProductController extends Controller
 
     /**
      * PUT /api/products/{id}
+     * Actualizar un producto
      */
     public function update(Request $request, $id)
     {
@@ -138,39 +128,28 @@ class ProductController extends Controller
                 'image'       => 'nullable|image|mimes:jpg,jpeg,png,webp|max:4096',
             ]);
 
-            /**
-             * Si sube nueva imagen:
-             * borrar antigua + guardar nueva
-             */
+            // 🔥 Si sube nueva imagen: borrar antigua + guardar nueva
             if ($request->hasFile('image')) {
-
-                if ($product->image) {
-
-                    $oldPath = str_replace(
-                        env('APP_URL') . '/',
-                        '',
-                        $product->image
-                    );
-
-                    if (Storage::disk('public')->exists($oldPath)) {
-                        Storage::disk('public')->delete($oldPath);
-                    }
-                }
-
+                // Eliminar imagen anterior usando el trait
+                $this->deleteImageFromProduction($product->image);
+                
                 $file = $request->file('image');
+                $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+                $destinationPath = '/home1/icjmeomy/apiapk.tudealer.app/public/imagenes_app/productos';
+                
+                if (!file_exists($destinationPath)) {
+                    mkdir($destinationPath, 0755, true);
+                }
+                
+                $file->move($destinationPath, $filename);
+                $imageUrl = 'https://apiapk.tudealer.app/imagenes_app/productos/' . $filename;
+                
+                $product->image = $imageUrl;
+            }
 
-                $filename =
-                    time() . '_' .
-                    uniqid() . '.' .
-                    $file->getClientOriginalExtension();
-
-                $path = $file->storeAs(
-                    'imagenes_app/productos',
-                    $filename,
-                    'public'
-                );
-
-                $product->image = env('APP_URL') . '/' . $path;
+            // Si viene imagen como string (base64 o URL)
+            if ($request->has('image') && is_string($request->image)) {
+                $product->image = $request->image;
             }
 
             $product->update([
@@ -178,7 +157,6 @@ class ProductController extends Controller
                 'description' => $request->description ?? $product->description,
                 'price'       => $request->price ?? $product->price,
                 'stock'       => $request->stock ?? $product->stock,
-                'image'       => $product->image,
             ]);
 
             return response()->json([
@@ -187,9 +165,7 @@ class ProductController extends Controller
             ]);
 
         } catch (Exception $e) {
-
             Log::error('Product update error: ' . $e->getMessage());
-
             return response()->json([
                 'error'   => 'Error al actualizar producto',
                 'message' => $e->getMessage()
@@ -199,27 +175,15 @@ class ProductController extends Controller
 
     /**
      * DELETE /api/products/{id}
+     * Eliminar un producto
      */
     public function destroy($id)
     {
         try {
             $product = Product::findOrFail($id);
 
-            /**
-             * borrar imagen física
-             */
-            if ($product->image) {
-
-                $path = str_replace(
-                    env('APP_URL') . '/',
-                    '',
-                    $product->image
-                );
-
-                if (Storage::disk('public')->exists($path)) {
-                    Storage::disk('public')->delete($path);
-                }
-            }
+            // 🔥 Eliminar imagen usando el trait
+            $this->deleteImageFromProduction($product->image);
 
             $product->delete();
 
@@ -228,9 +192,7 @@ class ProductController extends Controller
             ]);
 
         } catch (Exception $e) {
-
             Log::error('Product delete error: ' . $e->getMessage());
-
             return response()->json([
                 'error'   => 'Error al eliminar producto',
                 'message' => $e->getMessage()
@@ -240,6 +202,7 @@ class ProductController extends Controller
 
     /**
      * GET /api/products/latest
+     * Obtener los últimos 5 productos
      */
     public function latest()
     {

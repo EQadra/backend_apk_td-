@@ -119,39 +119,41 @@ Route::middleware('auth:api')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
-    | IMAGE UPLOAD (TRAIT ENDPOINTS)
+    | IMAGE UPLOAD (TRAIT ENDPOINTS) - 🔥 ESTAS RUTAS YA NO SE USAN
     |--------------------------------------------------------------------------
+    | Estas rutas usaban el método uploadImageByRole del Controller base.
+    | Ahora usamos uploadImageToProduction en cada controlador.
+    | Puedes ELIMINAR estas rutas o dejarlas comentadas.
     */
-    Route::post('doctors/upload-image/{id}', function (\Illuminate\Http\Request $request, $id) {
-        $doctor = \App\Models\Doctor::findOrFail($id);
-        return app(\App\Http\Controllers\Controller::class)
-            ->uploadImageByRole($request, $doctor);
-    });
+    // Route::post('doctors/upload-image/{id}', function (\Illuminate\Http\Request $request, $id) {
+    //     $doctor = \App\Models\Doctor::findOrFail($id);
+    //     return app(\App\Http\Controllers\Controller::class)
+    //         ->uploadImageByRole($request, $doctor);
+    // });
 
-    Route::post('lawyers/upload-image/{id}', function (\Illuminate\Http\Request $request, $id) {
-        $lawyer = \App\Models\Lawyer::findOrFail($id);
-        return app(\App\Http\Controllers\Controller::class)
-            ->uploadImageByRole($request, $lawyer);
-    });
+    // Route::post('lawyers/upload-image/{id}', function (\Illuminate\Http\Request $request, $id) {
+    //     $lawyer = \App\Models\Lawyer::findOrFail($id);
+    //     return app(\App\Http\Controllers\Controller::class)
+    //         ->uploadImageByRole($request, $lawyer);
+    // });
 
-    Route::post('shops/upload-image/{id}', function (\Illuminate\Http\Request $request, $id) {
-        $shop = \App\Models\Shop::findOrFail($id);
-        return app(\App\Http\Controllers\Controller::class)
-            ->uploadImageByRole($request, $shop);
-    });
+    // Route::post('shops/upload-image/{id}', function (\Illuminate\Http\Request $request, $id) {
+    //     $shop = \App\Models\Shop::findOrFail($id);
+    //     return app(\App\Http\Controllers\Controller::class)
+    //         ->uploadImageByRole($request, $shop);
+    // });
 
-    Route::post('associations/upload-image/{id}', function (\Illuminate\Http\Request $request, $id) {
-        $association = \App\Models\Association::findOrFail($id);
-        return app(\App\Http\Controllers\Controller::class)
-            ->uploadImageByRole($request, $association);
-    });
+    // Route::post('associations/upload-image/{id}', function (\Illuminate\Http\Request $request, $id) {
+    //     $association = \App\Models\Association::findOrFail($id);
+    //     return app(\App\Http\Controllers\Controller::class)
+    //         ->uploadImageByRole($request, $association);
+    // });
 
     /*
     |--------------------------------------------------------------------------
     | CUSTOM ROUTES (PROTEGIDAS)
     |--------------------------------------------------------------------------
     */
-    // me (requieren autenticación)
     Route::get('associations/me', [AssociationController::class, 'me']);
     Route::get('doctors/me', [DoctorController::class, 'me']);
     Route::get('lawyers/me', [LawyerController::class, 'me']);
@@ -171,39 +173,31 @@ Route::middleware('auth:api')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
-    | NEWS ROUTES - COMPLETAS CON LIKES ✅
+    | NEWS ROUTES
     |--------------------------------------------------------------------------
     */
     Route::prefix('news')->group(function () {
-        // 📌 Rutas públicas
-            Route::get('/', [NewsController::class, 'index']);        // 🔥 AGREGAR ESTA
-
+        Route::get('/', [NewsController::class, 'index']);
         Route::get('latest', [NewsController::class, 'latest']);
         Route::get('home', [NewsController::class, 'home']);
         Route::get('index', [NewsController::class, 'index']);
         Route::get('{id}', [NewsController::class, 'show']);
     });
 
-    // 📌 Rutas protegidas (requieren autenticación)
     Route::middleware('auth:api')->prefix('news')->group(function () {
-        // Noticias del usuario
         Route::get('my/latest', [NewsController::class, 'myLatestNews']);
         Route::get('my/all', [NewsController::class, 'myAllNews']);
         Route::get('my/liked', [NewsController::class, 'myLikedNews']);
         
-        // CRUD
         Route::post('/', [NewsController::class, 'store']);
         Route::put('{id}', [NewsController::class, 'update']);
         Route::delete('{id}', [NewsController::class, 'destroy']);
         
-        // Comentarios
         Route::post('{id}/comments', [NewsController::class, 'addComment']);
         
-        // Likes
         Route::post('{id}/like', [NewsController::class, 'toggleLike']);
         Route::get('{id}/check-like', [NewsController::class, 'checkLike']);
         
-        // Depuración
         Route::get('debug/{userId}', [NewsController::class, 'debugUserNews']);
     });
 
@@ -217,52 +211,59 @@ Route::middleware('auth:api')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
-    | POSTS ROUTES - COMPLETAS CON COMENTARIOS Y LIKES ✅
+    | POSTS ROUTES
     |--------------------------------------------------------------------------
     */
-    // 📌 Rutas públicas para posts
     Route::prefix('posts')->group(function () {
         Route::get('/', [PostController::class, 'index']);
         Route::get('/home', [PostController::class, 'home']);
         Route::get('/search', [PostController::class, 'search']);
         Route::get('/{id}', [PostController::class, 'show']);
         Route::get('/{id}/likes', [PostController::class, 'getLikes']);
+        Route::get('/{id}/comments', [CommentController::class, 'getPostComments']);
     });
 
-    // 📌 Rutas protegidas para posts
     Route::middleware('auth:api')->prefix('posts')->group(function () {
-        // CRUD 
         Route::post('/', [PostController::class, 'store']);
         Route::put('/{id}', [PostController::class, 'update']);
         Route::delete('/{id}', [PostController::class, 'destroy']);
         
-        // Comentarios de posts
         Route::post('/{id}/comments', [PostController::class, 'addComment']);
         Route::delete('/comments/{id}', [PostController::class, 'deleteComment']);
         
-        // Likes de posts
         Route::post('/{id}/like', [PostController::class, 'toggleLike']);
     });
 
     /*
     |--------------------------------------------------------------------------
-    | PRODUCTS ROUTES - COMENTARIOS ✅ (CORREGIDO)
+    | PRODUCTS ROUTES - COMENTARIOS
     |--------------------------------------------------------------------------
     */
-    // 📌 Rutas protegidas para comentarios de productos
     Route::middleware('auth:api')->prefix('products')->group(function () {
-        // Comentarios de productos
         Route::get('/{productId}/comments', [CommentController::class, 'getProductComments']);
         Route::post('/{productId}/comments', [CommentController::class, 'storeProductComment']);
     });
 
-    // Ruta para eliminar comentarios de productos (independiente del tipo)
     Route::delete('/product-comments/{id}', [CommentController::class, 'deleteProductComment']);
 
     /*
     |--------------------------------------------------------------------------
-    | ACTUALIZACIÓN DE IMÁGENES
+    | SERVICES ROUTES - COMENTARIOS ✅
     |--------------------------------------------------------------------------
+    */
+    Route::middleware('auth:api')->prefix('services')->group(function () {
+        Route::get('/{serviceId}/comments', [CommentController::class, 'getServiceComments']);
+        Route::post('/{serviceId}/comments', [CommentController::class, 'storeServiceComment']);
+    });
+
+    Route::delete('/service-comments/{id}', [CommentController::class, 'deleteServiceComment']);
+
+    /*
+    |--------------------------------------------------------------------------
+    | ACTUALIZACIÓN DE IMÁGENES - 🔥 RUTAS CORRECTAS
+    |--------------------------------------------------------------------------
+    | Estas rutas usan los métodos updateImage de cada controlador
+    | que ahora usan el trait UploadImage
     */
     Route::post('/doctor/image', [DoctorController::class, 'updateImage']);
     Route::post('/lawyer/image', [LawyerController::class, 'updateImage']);

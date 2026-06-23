@@ -4,13 +4,13 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use App\Models\Doctor;
+use App\Models\Traits\UploadImage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use App\Models\Traits\UploadProfileImage;
 
 class DoctorController extends Controller
 {
-    use UploadProfileImage;
+    use UploadImage;
     
     /**
      * LISTADO
@@ -42,9 +42,24 @@ class DoctorController extends Controller
             'services'        => 'nullable|string',
             'city'            => 'nullable|string|max:100',
             'university'      => 'nullable|string|max:255',
-            'image'           => 'nullable|string',
+            'image'           => 'nullable|image|mimes:jpg,jpeg,png,webp|max:4096',
             'schedule'        => 'nullable|string',
         ]);
+
+        $imageUrl = null;
+
+        if ($request->hasFile('image')) {
+            $file = $request->file('image');
+            $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+            $destinationPath = '/home1/icjmeomy/apiapk.tudealer.app/public/imagenes_app/doctors';
+            
+            if (!file_exists($destinationPath)) {
+                mkdir($destinationPath, 0755, true);
+            }
+            
+            $file->move($destinationPath, $filename);
+            $imageUrl = 'https://apiapk.tudealer.app/imagenes_app/doctors/' . $filename;
+        }
 
         $doctor = Doctor::create([
             'user_id'        => Auth::id(),
@@ -57,7 +72,7 @@ class DoctorController extends Controller
             'services'       => $request->services,
             'city'           => $request->city,
             'university'     => $request->university,
-            'image'          => $request->image,
+            'image'          => $imageUrl,
             'schedule'       => $request->schedule,
         ]);
 
@@ -84,10 +99,7 @@ class DoctorController extends Controller
     {
         $doctor = Doctor::findOrFail($id);
 
-        if (
-            $doctor->user_id !== Auth::id() &&
-            !Auth::user()->hasRole('admin')
-        ) {
+        if ($doctor->user_id !== Auth::id() && !Auth::user()->hasRole('admin')) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -101,9 +113,30 @@ class DoctorController extends Controller
             'services'        => 'nullable|string',
             'city'            => 'nullable|string|max:100',
             'university'      => 'nullable|string|max:255',
-            'image'           => 'nullable|string',
+            'image'           => 'nullable|image|mimes:jpg,jpeg,png,webp|max:4096',
             'schedule'        => 'nullable|string',
         ]);
+
+        if ($request->hasFile('image')) {
+            $this->deleteImageFromProduction($doctor->image);
+            
+            $file = $request->file('image');
+            $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+            $destinationPath = '/home1/icjmeomy/apiapk.tudealer.app/public/imagenes_app/doctors';
+            
+            if (!file_exists($destinationPath)) {
+                mkdir($destinationPath, 0755, true);
+            }
+            
+            $file->move($destinationPath, $filename);
+            $imageUrl = 'https://apiapk.tudealer.app/imagenes_app/doctors/' . $filename;
+            
+            $doctor->image = $imageUrl;
+        }
+
+        if ($request->has('image') && is_string($request->image)) {
+            $doctor->image = $request->image;
+        }
 
         $doctor->update($request->only([
             'first_name',
@@ -115,7 +148,6 @@ class DoctorController extends Controller
             'services',
             'city',
             'university',
-            'image',
             'schedule'
         ]));
 
@@ -163,12 +195,11 @@ class DoctorController extends Controller
     {
         $doctor = Doctor::findOrFail($id);
 
-        if (
-            $doctor->user_id !== Auth::id() &&
-            !Auth::user()->hasRole('admin')
-        ) {
+        if ($doctor->user_id !== Auth::id() && !Auth::user()->hasRole('admin')) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
+
+        $this->deleteImageFromProduction($doctor->image);
 
         $doctor->delete();
 
@@ -182,10 +213,9 @@ class DoctorController extends Controller
      */
     public function updateImage(Request $request)
     {
-        $doctor = Doctor::where('user_id', Auth::id())
-            ->firstOrFail();
+        $doctor = Doctor::where('user_id', Auth::id())->firstOrFail();
 
-        return $this->uploadImage(
+        return $this->uploadImageToProduction(
             $request,
             $doctor,
             'doctors'
@@ -193,36 +223,32 @@ class DoctorController extends Controller
     }
 
     /**
-     * 🔍 BUSCAR DOCTORES
+     * BUSCAR DOCTORES
      */
-   /**
- * 🔍 BUSCAR DOCTORES
- */
-public function search(Request $request)
-{
-    $query = $request->get('q');
-    
-    if (empty($query)) {
-        return response()->json([]);
+    public function search(Request $request)
+    {
+        $query = $request->get('q');
+        
+        if (empty($query)) {
+            return response()->json([]);
+        }
+
+        $doctors = Doctor::with([
+            'user',
+            'services'
+        ])
+        ->where(function($q) use ($query) {
+            $q->where('first_name', 'LIKE', "%{$query}%")
+              ->orWhere('last_name', 'LIKE', "%{$query}%")
+              ->orWhereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$query}%"])
+              ->orWhere('specialty', 'LIKE', "%{$query}%")
+              ->orWhere('city', 'LIKE', "%{$query}%")
+              ->orWhere('university', 'LIKE', "%{$query}%")
+              ->orWhere('description', 'LIKE', "%{$query}%");
+        })
+        ->latest()
+        ->get();
+
+        return response()->json($doctors);
     }
-
-    $doctors = Doctor::with([
-        'user',
-        'services'
-    ])
-    ->where(function($q) use ($query) {
-        $q->where('first_name', 'LIKE', "%{$query}%")
-          ->orWhere('last_name', 'LIKE', "%{$query}%")
-          // Búsqueda por nombre completo
-          ->orWhereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$query}%"])
-          ->orWhere('specialty', 'LIKE', "%{$query}%")
-          ->orWhere('city', 'LIKE', "%{$query}%")
-          ->orWhere('university', 'LIKE', "%{$query}%")
-          ->orWhere('description', 'LIKE', "%{$query}%");
-    })
-    ->latest()
-    ->get();
-
-    return response()->json($doctors);
-}
 }

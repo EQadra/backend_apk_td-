@@ -1,3 +1,4 @@
+// app/Models/Traits/UploadImage.php
 <?php
 
 namespace App\Models\Traits;

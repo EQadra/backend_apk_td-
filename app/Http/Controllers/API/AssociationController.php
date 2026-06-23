@@ -4,16 +4,15 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use App\Models\Association;
+use App\Models\Traits\UploadImage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Exception;
 
-use App\Models\Traits\UploadProfileImage;
-
 class AssociationController extends Controller
 {
-    use UploadProfileImage;
+    use UploadImage;
     
     /**
      * LISTADO
@@ -72,7 +71,7 @@ class AssociationController extends Controller
             'city'        => 'nullable|string|max:100',
             'address'     => 'nullable|string|max:255',
             'phone'       => 'nullable|string|max:20',
-            'image'       => 'nullable|string',
+            'image'       => 'nullable|image|mimes:jpg,jpeg,png,webp|max:4096',
             'website'     => 'nullable|string|max:255',
         ]);
 
@@ -84,6 +83,21 @@ class AssociationController extends Controller
             ], 409);
         }
 
+        $imageUrl = null;
+
+        if ($request->hasFile('image')) {
+            $file = $request->file('image');
+            $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+            $destinationPath = '/home1/icjmeomy/apiapk.tudealer.app/public/imagenes_app/associations';
+            
+            if (!file_exists($destinationPath)) {
+                mkdir($destinationPath, 0755, true);
+            }
+            
+            $file->move($destinationPath, $filename);
+            $imageUrl = 'https://apiapk.tudealer.app/imagenes_app/associations/' . $filename;
+        }
+
         $association = Association::create([
             'user_id'     => Auth::id(),
             'name'        => $request->name,
@@ -91,7 +105,7 @@ class AssociationController extends Controller
             'city'        => $request->city,
             'address'     => $request->address,
             'phone'       => $request->phone,
-            'image'       => $request->image,
+            'image'       => $imageUrl,
             'website'     => $request->website,
         ]);
 
@@ -125,10 +139,7 @@ class AssociationController extends Controller
     {
         $association = Association::findOrFail($id);
 
-        if (
-            $association->user_id !== Auth::id() &&
-            !Auth::user()->hasRole('admin')
-        ) {
+        if ($association->user_id !== Auth::id() && !Auth::user()->hasRole('admin')) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -138,9 +149,31 @@ class AssociationController extends Controller
             'city'        => 'nullable|string|max:100',
             'address'     => 'nullable|string|max:255',
             'phone'       => 'nullable|string|max:20',
-            'image'       => 'nullable|string',
+            'image'       => 'nullable|image|mimes:jpg,jpeg,png,webp|max:4096',
             'website'     => 'nullable|string|max:255',
         ]);
+
+        if ($request->hasFile('image')) {
+            // Eliminar imagen anterior
+            $this->deleteImageFromProduction($association->image);
+            
+            $file = $request->file('image');
+            $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+            $destinationPath = '/home1/icjmeomy/apiapk.tudealer.app/public/imagenes_app/associations';
+            
+            if (!file_exists($destinationPath)) {
+                mkdir($destinationPath, 0755, true);
+            }
+            
+            $file->move($destinationPath, $filename);
+            $imageUrl = 'https://apiapk.tudealer.app/imagenes_app/associations/' . $filename;
+            
+            $association->image = $imageUrl;
+        }
+
+        if ($request->has('image') && is_string($request->image)) {
+            $association->image = $request->image;
+        }
 
         $association->update($request->only([
             'name',
@@ -148,7 +181,6 @@ class AssociationController extends Controller
             'city',
             'address',
             'phone',
-            'image',
             'website'
         ]));
 
@@ -165,12 +197,11 @@ class AssociationController extends Controller
     {
         $association = Association::findOrFail($id);
 
-        if (
-            $association->user_id !== Auth::id() &&
-            !Auth::user()->hasRole('admin')
-        ) {
+        if ($association->user_id !== Auth::id() && !Auth::user()->hasRole('admin')) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
+
+        $this->deleteImageFromProduction($association->image);
 
         $association->delete();
 
@@ -201,20 +232,17 @@ class AssociationController extends Controller
      */
     public function updateImage(Request $request)
     {
-        $association = Association::where(
-            'user_id',
-            Auth::id()
-        )->firstOrFail();
-
-        return $this->uploadImage(
-            $request,
-            $association,
+        $association = Association::where('user_id', Auth::id())->firstOrFail();
+        
+        return $this->uploadImageToProduction(
+            $request, 
+            $association, 
             'associations'
         );
     }
 
     /**
-     * BÚSQUEDA - CORREGIDO
+     * BÚSQUEDA
      */
     public function search(Request $request)
     {
@@ -224,7 +252,6 @@ class AssociationController extends Controller
             return response()->json([]);
         }
 
-        // ✅ CORREGIDO: Usar $associations en lugar de $shops
         $associations = Association::with([
             'user',
             'posts'
@@ -242,4 +269,3 @@ class AssociationController extends Controller
         return response()->json($associations);
     }
 }
-// ✅ FIN DEL ARCHIVO - NADA MÁS DESPUÉS DE ESTO
