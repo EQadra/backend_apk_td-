@@ -199,6 +199,11 @@ Route::middleware('auth:api')->group(function () {
         Route::get('{id}/check-like', [NewsController::class, 'checkLike']);
         
         Route::get('debug/{userId}', [NewsController::class, 'debugUserNews']);
+
+
+        // Dentro del grupo 'auth:api'
+Route::post('/user/avatar', [AuthController::class, 'updateAvatar']);
+Route::delete('/user/avatar', [AuthController::class, 'deleteAvatar']);
     });
 
     /*
@@ -269,7 +274,13 @@ Route::middleware('auth:api')->group(function () {
     Route::post('/lawyer/image', [LawyerController::class, 'updateImage']);
     Route::post('/association/image', [AssociationController::class, 'updateImage']);
     Route::post('/shop/image', [ShopController::class, 'updateImage']);
-
+    /*
+    |--------------------------------------------------------------------------
+    | 🔥 AVATAR DE USUARIO (DEBE ESTAR AQUÍ, NO DENTRO DE NEWS)
+    |--------------------------------------------------------------------------
+    */
+    Route::post('/user/avatar', [AuthController::class, 'updateAvatar']);
+    Route::delete('/user/avatar', [AuthController::class, 'deleteAvatar']);
     /*
     |--------------------------------------------------------------------------
     | FAVORITES

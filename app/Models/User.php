@@ -18,12 +18,15 @@ class User extends Authenticatable implements JWTSubject
         'name',
         'email',
         'password',
+        'avatar', // ✅ Agregado
     ];
 
     protected $hidden = [
         'password',
         'remember_token',
     ];
+
+    protected $appends = ['avatar_url']; // ✅ Para obtener la URL completa
 
     protected function casts(): array
     {
@@ -48,7 +51,7 @@ class User extends Authenticatable implements JWTSubject
     }
 
     /* =========================
-       🔗 RELATIONSHIPS (NO TOCAR)
+       🔗 RELATIONSHIPS
        ========================= */
 
     public function doctor()
@@ -81,31 +84,47 @@ class User extends Authenticatable implements JWTSubject
         return $this->hasMany(Feedback::class);
     }
 
-            public function posts()
-        {
-            return $this->hasMany(Post::class);
-        }
+    public function posts()
+    {
+        return $this->hasMany(Post::class);
+    }
 
-            public function news()
+    public function news()
     {
         return $this->morphMany(News::class, 'newable');
     }
 
     public function favorites()
-{
-    return $this->hasMany(Favorite::class);
-}
+    {
+        return $this->hasMany(Favorite::class);
+    }
 
-public function histories()
-{
-    return $this->hasMany(History::class);
-}
+    public function histories()
+    {
+        return $this->hasMany(History::class);
+    }
 
-public function postsAsPostable()
-{
-    return $this->morphMany(Post::class, 'postable');
-}
+    public function postsAsPostable()
+    {
+        return $this->morphMany(Post::class, 'postable');
+    }
 
+    /* =========================
+       🔥 ACCESOR PARA AVATAR URL
+       ========================= */
 
+    public function getAvatarUrlAttribute()
+    {
+        if (!$this->avatar) {
+            return null;
+        }
 
+        // Si ya es una URL completa, devolverla
+        if (filter_var($this->avatar, FILTER_VALIDATE_URL)) {
+            return $this->avatar;
+        }
+
+        // Si es una ruta relativa, construir la URL
+        return asset('storage/' . $this->avatar);
+    }
 }

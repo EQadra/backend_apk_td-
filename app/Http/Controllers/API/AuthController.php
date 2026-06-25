@@ -67,7 +67,7 @@ class AuthController extends Controller
     }
 
     /* =======================
-     | REGISTER (CORREGIDO)
+     | REGISTER
      ======================= */
     
     public function register(Request $request)
@@ -252,6 +252,114 @@ class AuthController extends Controller
         ]);
 
         return response()->json(['message' => 'Contraseña cambiada correctamente']);
+    }
+
+    /* =======================
+     | ✅ ACTUALIZAR AVATAR (NUEVO)
+     ======================= */
+    
+    public function updateAvatar(Request $request)
+    {
+        $request->validate([
+            'avatar' => 'required|image|mimes:jpg,jpeg,png,webp|max:4096',
+        ]);
+
+        $user = Auth::user();
+
+        if (!$user) {
+            return response()->json([
+                'message' => 'Usuario no autenticado'
+            ], 401);
+        }
+
+        try {
+            // Eliminar avatar anterior si existe
+            if ($user->avatar) {
+                $oldPath = str_replace('https://apiapk.tudealer.app/', '', $user->avatar);
+                $fullPath = '/home1/icjmeomy/apiapk.tudealer.app/public/' . $oldPath;
+                if (file_exists($fullPath)) {
+                    unlink($fullPath);
+                }
+            }
+
+            $file = $request->file('avatar');
+            $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+            $destinationPath = '/home1/icjmeomy/apiapk.tudealer.app/public/imagenes_app/avatars';
+            
+            if (!file_exists($destinationPath)) {
+                mkdir($destinationPath, 0755, true);
+            }
+            
+            $file->move($destinationPath, $filename);
+            $avatarUrl = 'https://apiapk.tudealer.app/imagenes_app/avatars/' . $filename;
+            
+            $user->update(['avatar' => $avatarUrl]);
+
+            // Recargar usuario con perfiles
+            $user->load(['doctor', 'lawyer', 'association', 'shop']);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Avatar actualizado correctamente',
+                'data' => [
+                    'avatar' => $avatarUrl,
+                    'user' => $user
+                ]
+            ], 200);
+
+        } catch (\Exception $e) {
+            Log::error('Error al subir avatar: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al subir la imagen',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /* =======================
+     | ✅ ELIMINAR AVATAR (NUEVO)
+     ======================= */
+    
+    public function deleteAvatar(Request $request)
+    {
+        $user = Auth::user();
+
+        if (!$user) {
+            return response()->json([
+                'message' => 'Usuario no autenticado'
+            ], 401);
+        }
+
+        try {
+            // Eliminar avatar anterior si existe
+            if ($user->avatar) {
+                $oldPath = str_replace('https://apiapk.tudealer.app/', '', $user->avatar);
+                $fullPath = '/home1/icjmeomy/apiapk.tudealer.app/public/' . $oldPath;
+                if (file_exists($fullPath)) {
+                    unlink($fullPath);
+                }
+            }
+
+            $user->update(['avatar' => null]);
+
+            // Recargar usuario con perfiles
+            $user->load(['doctor', 'lawyer', 'association', 'shop']);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Avatar eliminado correctamente',
+                'data' => $user
+            ], 200);
+
+        } catch (\Exception $e) {
+            Log::error('Error al eliminar avatar: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al eliminar la imagen',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     /* =======================
