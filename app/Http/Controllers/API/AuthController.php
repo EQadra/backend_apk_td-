@@ -67,7 +67,7 @@ class AuthController extends Controller
     }
 
     /* =======================
-     | REGISTER
+     | REGISTER (CORREGIDO)
      ======================= */
     
     public function register(Request $request)
@@ -88,34 +88,40 @@ class AuthController extends Controller
         if ($request->dni) {
             // USUARIO NORMAL
             $user->update(['dni' => $request->dni]);
-        } elseif ($request->licencia) {
+        } 
+        elseif ($request->licencia) {
+            // ABOGADO: se requiere first_name y last_name
             Lawyer::create([
-                'user_id' => $user->id,
-                'license_code' => $request->licencia,
+                'user_id'     => $user->id,
+                'first_name'  => $request->first_name ?? $request->name,
+                'last_name'   => $request->last_name ?? '',
+                'license_code'=> $request->licencia,
             ]);
-        } elseif ($request->codigoDoctor) {
+        } 
+        elseif ($request->codigoDoctor) {
+            // DOCTOR: el campo en BD es graduation_code
             Doctor::create([
-                'user_id' => $user->id,
-                'first_name' => $request->first_name,
-                'last_name' => $request->last_name,
-                'degree' => $request->degree,
-                'specialty' => $request->specialty,
+                'user_id'         => $user->id,
+                'first_name'      => $request->first_name,
+                'last_name'       => $request->last_name,
+                'degree'          => $request->degree ?? 'Médico',
+                'specialty'       => $request->specialty ?? 'General',
                 'graduation_code' => $request->codigoDoctor,
             ]);
-        } elseif ($request->ruc) {
+        } 
+        elseif ($request->ruc) {
             if ($request->type === 'asociacion') {
                 Association::create([
                     'user_id' => $user->id,
-                    'name' => $request->name,
-                    'ruc' => $request->ruc,
+                    'name'    => $request->name,
+                    'ruc'     => $request->ruc,
                 ]);
             }
-
             if ($request->type === 'tienda') {
                 Shop::create([
                     'user_id' => $user->id,
-                    'name' => $request->name,
-                    'ruc' => $request->ruc,
+                    'name'    => $request->name,
+                    'ruc'     => $request->ruc,
                 ]);
             }
         }
@@ -137,7 +143,7 @@ class AuthController extends Controller
     /* =======================
      | ME
      ======================= */
-      public function me()
+    public function me()
     {
         $user = Auth::guard('api')->user();
 
