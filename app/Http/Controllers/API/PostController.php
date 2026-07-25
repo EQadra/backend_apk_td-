@@ -174,6 +174,71 @@ class PostController extends Controller
     }
 
     /**
+     * PUT /api/posts/{id}
+     * Actualizar post
+     */
+    public function update(Request $request, $id)
+    {
+        $post = Post::findOrFail($id);
+
+        // Verificar permisos
+        if ($post->user_id !== Auth::id() && !Auth::user()->hasRole('admin')) {
+            return response()->json([
+                'message' => 'No autorizado para editar este post'
+            ], 403);
+        }
+
+        $request->validate([
+            'title'    => 'sometimes|required|string|max:255',
+            'content'  => 'sometimes|required|string',
+            'image'    => 'nullable|image|mimes:jpg,jpeg,png,webp|max:4096',
+            'category' => 'nullable|string|max:100',
+        ]);
+
+        // Actualizar imagen si se envía una nueva
+        if ($request->hasFile('image')) {
+            // Eliminar imagen anterior si existe
+            if ($post->image) {
+                $this->deleteImageFromProduction($post->image);
+            }
+
+            $file = $request->file('image');
+            $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+            $destinationPath = '/home1/icjmeomy/apiapk.tudealer.app/public/imagenes_app/posts';
+            
+            if (!file_exists($destinationPath)) {
+                mkdir($destinationPath, 0755, true);
+            }
+            
+            $file->move($destinationPath, $filename);
+            $imageUrl = 'https://apiapk.tudealer.app/imagenes_app/posts/' . $filename;
+            
+            $post->image = $imageUrl;
+        }
+
+        // Si se envía una URL de imagen directamente
+        if ($request->has('image') && is_string($request->image) && !$request->hasFile('image')) {
+            $post->image = $request->image;
+        }
+
+        // Actualizar campos
+        $post->update($request->only([
+            'title',
+            'content',
+            'category'
+        ]));
+
+        return response()->json([
+            'message' => 'Post actualizado correctamente',
+            'data'    => $post->load([
+                'user',
+                'postable',
+                'comments.user'
+            ])
+        ], 200);
+    }
+
+    /**
      * DELETE /api/posts/{id}
      * Eliminar post
      */
@@ -400,4 +465,52 @@ class PostController extends Controller
 
         return response()->json($posts);
     }
+
+    /**
+     * POST /api/posts/{id}/image
+     * Actualizar solo la imagen del post
+     */
+    public function updateImage(Request $request, $id)
+    {
+        $post = Post::findOrFail($id);
+
+        // Verificar permisos
+        if ($post->user_id !== Auth::id() && !Auth::user()->hasRole('admin')) {
+            return response()->json([
+                'message' => 'No autorizado'
+            ], 403);
+        }
+
+        $request->validate([
+            'image' => 'required|image|mimes:jpg,jpeg,png,webp|max:4096',
+        ]);
+
+        // Eliminar imagen anterior
+        if ($post->image) {
+            $this->deleteImageFromProduction($post->image);
+        }
+
+        // Subir nueva imagen
+        $file = $request->file('image');
+        $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+        $destinationPath = '/home1/icjmeomy/apiapk.tudealer.app/public/imagenes_app/posts';
+        
+        if (!file_exists($destinationPath)) {
+            mkdir($destinationPath, 0755, true);
+        }
+        
+        $file->move($destinationPath, $filename);
+        $imageUrl = 'https://apiapk.tudealer.app/imagenes_app/posts/' . $filename;
+
+        $post->image = $imageUrl;
+        $post->save();
+
+        return response()->json([
+            'message' => 'Imagen actualizada correctamente',
+            'data' => $post
+        ], 200);
+    }
+
+
+    
 }

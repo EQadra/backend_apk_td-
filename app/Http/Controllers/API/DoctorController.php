@@ -30,6 +30,7 @@ class DoctorController extends Controller
     /**
      * CREAR
      */
+ // En el método store
     public function store(Request $request)
     {
         $request->validate([
@@ -44,22 +45,13 @@ class DoctorController extends Controller
             'university'      => 'nullable|string|max:255',
             'image'           => 'nullable|image|mimes:jpg,jpeg,png,webp|max:4096',
             'schedule'        => 'nullable|string',
+            // Nuevos campos de teléfono
+            'phone'           => 'nullable|string|max:20',
+            'emergency_phone' => 'nullable|string|max:20',
+            'clinic_phone'    => 'nullable|string|max:20',
         ]);
 
-        $imageUrl = null;
-
-        if ($request->hasFile('image')) {
-            $file = $request->file('image');
-            $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
-            $destinationPath = '/home1/icjmeomy/apiapk.tudealer.app/public/imagenes_app/doctors';
-            
-            if (!file_exists($destinationPath)) {
-                mkdir($destinationPath, 0755, true);
-            }
-            
-            $file->move($destinationPath, $filename);
-            $imageUrl = 'https://apiapk.tudealer.app/imagenes_app/doctors/' . $filename;
-        }
+        // ... resto del código ...
 
         $doctor = Doctor::create([
             'user_id'        => Auth::id(),
@@ -74,27 +66,16 @@ class DoctorController extends Controller
             'university'     => $request->university,
             'image'          => $imageUrl,
             'schedule'       => $request->schedule,
+            // Nuevos campos
+            'phone'          => $request->phone,
+            'emergency_phone' => $request->emergency_phone,
+            'clinic_phone'   => $request->clinic_phone,
         ]);
 
         return response()->json($doctor, 201);
     }
 
-    /**
-     * VER
-     */
-    public function show($id)
-    {
-        return Doctor::with([
-            'user',
-            'feedbacks',
-            'posts',
-            'services'
-        ])->findOrFail($id);
-    }
-
-    /**
-     * ACTUALIZAR
-     */
+    // En el método update
     public function update(Request $request, $id)
     {
         $doctor = Doctor::findOrFail($id);
@@ -115,28 +96,13 @@ class DoctorController extends Controller
             'university'      => 'nullable|string|max:255',
             'image'           => 'nullable|image|mimes:jpg,jpeg,png,webp|max:4096',
             'schedule'        => 'nullable|string',
+            // Nuevos campos de teléfono
+            'phone'           => 'nullable|string|max:20',
+            'emergency_phone' => 'nullable|string|max:20',
+            'clinic_phone'    => 'nullable|string|max:20',
         ]);
 
-        if ($request->hasFile('image')) {
-            $this->deleteImageFromProduction($doctor->image);
-            
-            $file = $request->file('image');
-            $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
-            $destinationPath = '/home1/icjmeomy/apiapk.tudealer.app/public/imagenes_app/doctors';
-            
-            if (!file_exists($destinationPath)) {
-                mkdir($destinationPath, 0755, true);
-            }
-            
-            $file->move($destinationPath, $filename);
-            $imageUrl = 'https://apiapk.tudealer.app/imagenes_app/doctors/' . $filename;
-            
-            $doctor->image = $imageUrl;
-        }
-
-        if ($request->has('image') && is_string($request->image)) {
-            $doctor->image = $request->image;
-        }
+        // ... resto del código para imagen ...
 
         $doctor->update($request->only([
             'first_name',
@@ -148,7 +114,11 @@ class DoctorController extends Controller
             'services',
             'city',
             'university',
-            'schedule'
+            'schedule',
+            // Nuevos campos
+            'phone',
+            'emergency_phone',
+            'clinic_phone',
         ]));
 
         return response()->json([
@@ -156,6 +126,23 @@ class DoctorController extends Controller
             'data' => $doctor
         ]);
     }
+    /**
+     * VER
+     */
+    public function show($id)
+    {
+        return Doctor::with([
+            'user',
+            'feedbacks',
+            'posts',
+            'services'
+        ])->findOrFail($id);
+    }
+
+    /**
+     * ACTUALIZAR
+     */
+ 
 
     /**
      * MI PERFIL

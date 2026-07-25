@@ -6,8 +6,11 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\News;
 use App\Models\Comment;
+use App\Models\Like;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 class NewsController extends Controller
 {
@@ -17,6 +20,7 @@ class NewsController extends Controller
     public function latest()
     {
         $news = News::with([
+            'user',
             'newable',
             'comments.user'
         ])
@@ -32,7 +36,7 @@ class NewsController extends Controller
      */
     public function home()
     {
-        $news = News::with(['newable', 'comments.user'])
+        $news = News::with(['user', 'newable', 'comments.user'])
             ->latest('created_at')
             ->take(6)
             ->get();
@@ -45,9 +49,8 @@ class NewsController extends Controller
      */
     public function index(Request $request)
     {
-        $query = News::with(['newable', 'comments.user']);
+        $query = News::with(['user', 'newable', 'comments.user']);
 
-        // Filtro por tipo (doctor, lawyer, shop, association)
         if ($request->has('type')) {
             $typeMap = [
                 'doctor'      => 'App\\Models\\Doctor',
@@ -60,12 +63,10 @@ class NewsController extends Controller
             }
         }
 
-        // Filtro por búsqueda en título
         if ($request->has('search')) {
             $query->where('titulo', 'LIKE', '%' . $request->search . '%');
         }
 
-        // Paginación
         $perPage = $request->get('per_page', 10);
         $news = $query->latest('created_at')->paginate($perPage);
 
@@ -73,28 +74,45 @@ class NewsController extends Controller
     }
 
     /**
-     * Crear una nueva noticia
+     * Crear una nueva noticia - CUALQUIER USUARIO PUEDE CREAR
      */
-    public function store(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'titulo' => 'required|string|max:191',
-            'descripcion' => 'nullable|string',
-            'url' => 'nullable|url|max:191',
-            'fecha_publicacion' => 'nullable|date',
-            'newable_type' => 'required|string|in:App\\Models\\Doctor,App\\Models\\Lawyer,App\\Models\\Shop,App\\Models\\Association',
-            'newable_id' => 'required|integer|exists:' . $this->getTableName($request->newable_type) . ',id',
-        ]);
+// app/Http/Controllers/API/NewsController.php - store modificado
 
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'errors' => $validator->errors()
-            ], 422);
-        }
+// app/Http/Controllers/API/NewsController.php - store corregido
 
-        // Verificar que el usuario sea propietario del perfil o admin
-        $user = Auth::user();
+public function store(Request $request)
+{
+    $validator = Validator::make($request->all(), [
+        'titulo' => 'required|string|max:191',
+        'descripcion' => 'nullable|string',
+        'url' => 'nullable|url|max:191',
+        'image' => 'nullable|string|max:191',
+        'fecha_publicacion' => 'nullable|date',
+        'newable_type' => 'nullable|string|in:App\\Models\\Doctor,App\\Models\\Lawyer,App\\Models\\Shop,App\\Models\\Association',
+        'newable_id' => 'nullable|integer',
+    ]);
+
+    if ($validator->fails()) {
+        return response()->json([
+            'success' => false,
+            'errors' => $validator->errors()
+        ], 422);
+    }
+
+    $user = Auth::user();
+
+    // Datos base
+    $data = [
+        'user_id' => $user->id,
+        'titulo' => $request->titulo,
+        'descripcion' => $request->descripcion,
+        'url' => $request->url,
+        'image' => $request->image,
+        'fecha_publicacion' => $request->fecha_publicacion ?? now(),
+    ];
+
+    // ✅ Si se proporciona newable_type y newable_id, verificar permisos
+    if ($request->newable_type && $request->newable_id) {
         $newable = $this->getNewableModel($request->newable_type, $request->newable_id);
         
         if (!$newable) {
@@ -104,7 +122,7 @@ class NewsController extends Controller
             ], 404);
         }
 
-        // Verificar propiedad (solo el dueño o admin pueden crear)
+        // Verificar que el usuario sea dueño del perfil o admin
         if ($newable->user_id !== $user->id && !$user->hasRole('admin')) {
             return response()->json([
                 'success' => false,
@@ -112,31 +130,33 @@ class NewsController extends Controller
             ], 403);
         }
 
-        $news = News::create([
-            'titulo' => $request->titulo,
-            'descripcion' => $request->descripcion,
-            'url' => $request->url,
-            'fecha_publicacion' => $request->fecha_publicacion ?? now(),
-            'newable_type' => $request->newable_type,
-            'newable_id' => $request->newable_id,
-        ]);
+        $data['newable_type'] = $request->newable_type;
+        $data['newable_id'] = $request->newable_id;
+    }
+    // ✅ Si no se proporciona, newable_type y newable_id serán null en BD
 
-        // Cargar relaciones para la respuesta
-        $news->load(['newable', 'comments.user']);
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Noticia creada exitosamente',
-            'data' => $news
-        ], 201);
+    // Subir imagen si es un archivo
+    if ($request->hasFile('image')) {
+        $imageUrl = $this->uploadImage($request->file('image'));
+        $data['image'] = $imageUrl;
     }
 
+    $news = News::create($data);
+
+    $news->load(['user', 'newable', 'comments.user']);
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Noticia creada exitosamente',
+        'data' => $news
+    ], 201);
+}
     /**
      * Mostrar una noticia específica
      */
     public function show($id)
     {
-        $news = News::with(['newable', 'comments.user'])->find($id);
+        $news = News::with(['user', 'newable', 'comments.user'])->find($id);
 
         if (!$news) {
             return response()->json([
@@ -162,21 +182,26 @@ class NewsController extends Controller
             ], 404);
         }
 
-        // Verificar propiedad (solo el dueño o admin pueden editar)
         $user = Auth::user();
-        $newable = $news->newable;
-        
-        if ($newable && $newable->user_id !== $user->id && !$user->hasRole('admin')) {
-            return response()->json([
-                'success' => false,
-                'message' => 'No tienes permiso para editar esta noticia'
-            ], 403);
+
+        // Verificar que el usuario sea el dueño o admin
+        if ($news->user_id !== $user->id && !$user->hasRole('admin')) {
+            // Verificar si es dueño del perfil asociado
+            if ($news->newable && isset($news->newable->user_id) && $news->newable->user_id === $user->id) {
+                // El usuario es dueño del perfil
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No tienes permiso para editar esta noticia'
+                ], 403);
+            }
         }
 
         $validator = Validator::make($request->all(), [
             'titulo' => 'sometimes|required|string|max:191',
             'descripcion' => 'nullable|string',
             'url' => 'nullable|url|max:191',
+            'image' => 'nullable|string|max:191',
             'fecha_publicacion' => 'nullable|date',
         ]);
 
@@ -187,14 +212,25 @@ class NewsController extends Controller
             ], 422);
         }
 
+        // Actualizar imagen si se envía un archivo
+        if ($request->hasFile('image')) {
+            if ($news->image) {
+                $this->deleteImage($news->image);
+            }
+            $imageUrl = $this->uploadImage($request->file('image'));
+            $news->image = $imageUrl;
+        }
+
+        // Actualizar campos
         $news->update($request->only([
             'titulo',
             'descripcion',
             'url',
+            'image',
             'fecha_publicacion'
         ]));
 
-        $news->load(['newable', 'comments.user']);
+        $news->load(['user', 'newable', 'comments.user']);
 
         return response()->json([
             'success' => true,
@@ -217,21 +253,25 @@ class NewsController extends Controller
             ], 404);
         }
 
-        // Verificar propiedad (solo el dueño o admin pueden eliminar)
         $user = Auth::user();
-        $newable = $news->newable;
-        
-        if ($newable && $newable->user_id !== $user->id && !$user->hasRole('admin')) {
-            return response()->json([
-                'success' => false,
-                'message' => 'No tienes permiso para eliminar esta noticia'
-            ], 403);
+
+        // Verificar que el usuario sea el dueño o admin
+        if ($news->user_id !== $user->id && !$user->hasRole('admin')) {
+            if ($news->newable && isset($news->newable->user_id) && $news->newable->user_id === $user->id) {
+                // El usuario es dueño del perfil
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No tienes permiso para eliminar esta noticia'
+                ], 403);
+            }
         }
 
-        // Eliminar comentarios asociados
+        if ($news->image) {
+            $this->deleteImage($news->image);
+        }
+
         $news->comments()->delete();
-        
-        // Eliminar noticia
         $news->delete();
 
         return response()->json([
@@ -284,154 +324,316 @@ class NewsController extends Controller
     /**
      * Obtener las últimas noticias del usuario autenticado
      */
-     /**
- * Obtener las últimas noticias del usuario autenticado
- */
-public function myLatestNews()
-{
-    $user = Auth::user();
-    
-    if (!$user) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Usuario no autenticado'
-        ], 401);
-    }
-
-    $user->load(['doctor', 'lawyer', 'shop', 'association']);
-
-    // 🔥 CONSTRUIR CONDICIONES DE FORMA MÁS LIMPIA
-    $conditions = [];
-
-    if ($user->doctor) {
-        $conditions[] = [
-            'newable_type' => 'App\\Models\\Doctor',
-            'newable_id' => $user->doctor->id
-        ];
-    }
-
-    if ($user->lawyer) {
-        $conditions[] = [
-            'newable_type' => 'App\\Models\\Lawyer',
-            'newable_id' => $user->lawyer->id
-        ];
-    }
-
-    if ($user->shop) {
-        $conditions[] = [
-            'newable_type' => 'App\\Models\\Shop',
-            'newable_id' => $user->shop->id
-        ];
-    }
-
-    if ($user->association) {
-        $conditions[] = [
-            'newable_type' => 'App\\Models\\Association',
-            'newable_id' => $user->association->id
-        ];
-    }
-
-    if (empty($conditions)) {
-        return response()->json([]);
-    }
-
-    // ✅ CONSTRUCCIÓN CORRECTA CON WHERE + CLOSURE
-    $query = News::with(['newable', 'comments.user']);
-
-    $query->where(function ($q) use ($conditions) {
-        foreach ($conditions as $condition) {
-            $q->orWhere(function ($subQ) use ($condition) {
-                $subQ->where('newable_type', $condition['newable_type'])
-                     ->where('newable_id', $condition['newable_id']);
-            });
+    public function myLatestNews()
+    {
+        $user = Auth::user();
+        
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Usuario no autenticado'
+            ], 401);
         }
-    });
 
-    $news = $query->latest('created_at')->take(5)->get();
+        $user->load(['doctor', 'lawyer', 'shop', 'association']);
 
-    return response()->json($news);
-}
+        $news = News::with(['user', 'newable', 'comments.user'])
+            ->where(function ($query) use ($user) {
+                // Noticias creadas por el usuario
+                $query->where('user_id', $user->id);
+                
+                // Noticias de los perfiles del usuario
+                if ($user->doctor) {
+                    $query->orWhere(function ($q) use ($user) {
+                        $q->where('newable_type', 'App\\Models\\Doctor')
+                          ->where('newable_id', $user->doctor->id);
+                    });
+                }
+                if ($user->lawyer) {
+                    $query->orWhere(function ($q) use ($user) {
+                        $q->where('newable_type', 'App\\Models\\Lawyer')
+                          ->where('newable_id', $user->lawyer->id);
+                    });
+                }
+                if ($user->shop) {
+                    $query->orWhere(function ($q) use ($user) {
+                        $q->where('newable_type', 'App\\Models\\Shop')
+                          ->where('newable_id', $user->shop->id);
+                    });
+                }
+                if ($user->association) {
+                    $query->orWhere(function ($q) use ($user) {
+                        $q->where('newable_type', 'App\\Models\\Association')
+                          ->where('newable_id', $user->association->id);
+                    });
+                }
+            })
+            ->latest('created_at')
+            ->take(5)
+            ->get();
 
-/**
- * Obtener TODAS las noticias del usuario autenticado
- */
-public function myAllNews()
-{
-    $user = Auth::user();
-    
-    if (!$user) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Usuario no autenticado'
-        ], 401);
+        return response()->json($news);
     }
-
-    $user->load(['doctor', 'lawyer', 'shop', 'association']);
-
-    // 🔥 CONSTRUIR CONDICIONES DE FORMA MÁS LIMPIA
-    $conditions = [];
-
-    if ($user->doctor) {
-        $conditions[] = [
-            'newable_type' => 'App\\Models\\Doctor',
-            'newable_id' => $user->doctor->id
-        ];
-    }
-
-    if ($user->lawyer) {
-        $conditions[] = [
-            'newable_type' => 'App\\Models\\Lawyer',
-            'newable_id' => $user->lawyer->id
-        ];
-    }
-
-    if ($user->shop) {
-        $conditions[] = [
-            'newable_type' => 'App\\Models\\Shop',
-            'newable_id' => $user->shop->id
-        ];
-    }
-
-    if ($user->association) {
-        $conditions[] = [
-            'newable_type' => 'App\\Models\\Association',
-            'newable_id' => $user->association->id
-        ];
-    }
-
-    if (empty($conditions)) {
-        return response()->json([]);
-    }
-
-    // ✅ CONSTRUCCIÓN CORRECTA CON WHERE + CLOSURE
-    $query = News::with(['newable', 'comments.user']);
-
-    $query->where(function ($q) use ($conditions) {
-        foreach ($conditions as $condition) {
-            $q->orWhere(function ($subQ) use ($condition) {
-                $subQ->where('newable_type', $condition['newable_type'])
-                     ->where('newable_id', $condition['newable_id']);
-            });
-        }
-    });
-
-    $news = $query->latest('created_at')->get();
-
-    return response()->json($news);
-}
 
     /**
-     * Método auxiliar para obtener el nombre de la tabla
+     * Obtener TODAS las noticias del usuario autenticado
      */
-    private function getTableName($type)
+    public function myAllNews()
     {
-        $map = [
-            'App\\Models\\Doctor' => 'doctors',
-            'App\\Models\\Lawyer' => 'lawyers',
-            'App\\Models\\Shop' => 'shops',
-            'App\\Models\\Association' => 'associations',
+        $user = Auth::user();
+        
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Usuario no autenticado'
+            ], 401);
+        }
+
+        $user->load(['doctor', 'lawyer', 'shop', 'association']);
+
+        $news = News::with(['user', 'newable', 'comments.user'])
+            ->where(function ($query) use ($user) {
+                $query->where('user_id', $user->id);
+                
+                if ($user->doctor) {
+                    $query->orWhere(function ($q) use ($user) {
+                        $q->where('newable_type', 'App\\Models\\Doctor')
+                          ->where('newable_id', $user->doctor->id);
+                    });
+                }
+                if ($user->lawyer) {
+                    $query->orWhere(function ($q) use ($user) {
+                        $q->where('newable_type', 'App\\Models\\Lawyer')
+                          ->where('newable_id', $user->lawyer->id);
+                    });
+                }
+                if ($user->shop) {
+                    $query->orWhere(function ($q) use ($user) {
+                        $q->where('newable_type', 'App\\Models\\Shop')
+                          ->where('newable_id', $user->shop->id);
+                    });
+                }
+                if ($user->association) {
+                    $query->orWhere(function ($q) use ($user) {
+                        $q->where('newable_type', 'App\\Models\\Association')
+                          ->where('newable_id', $user->association->id);
+                    });
+                }
+            })
+            ->latest('created_at')
+            ->get();
+
+        return response()->json($news);
+    }
+
+    /**
+     * Dar like o quitar like a una noticia (toggle)
+     */
+    public function toggleLike($id)
+    {
+        $user = Auth::user();
+        
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Usuario no autenticado'
+            ], 401);
+        }
+
+        $news = News::find($id);
+
+        if (!$news) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Noticia no encontrada'
+            ], 404);
+        }
+
+        $existingLike = Like::where([
+            'user_id' => $user->id,
+            'likeable_type' => 'App\\Models\\News',
+            'likeable_id' => $news->id
+        ])->first();
+
+        if ($existingLike) {
+            $existingLike->delete();
+            
+            $likesCount = Like::where([
+                'likeable_type' => 'App\\Models\\News',
+                'likeable_id' => $news->id
+            ])->count();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Like eliminado',
+                'data' => [
+                    'liked' => false,
+                    'likes_count' => $likesCount,
+                    'news_id' => $news->id
+                ]
+            ]);
+        } else {
+            $like = Like::create([
+                'user_id' => $user->id,
+                'likeable_type' => 'App\\Models\\News',
+                'likeable_id' => $news->id
+            ]);
+
+            $likesCount = Like::where([
+                'likeable_type' => 'App\\Models\\News',
+                'likeable_id' => $news->id
+            ])->count();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Like agregado',
+                'data' => [
+                    'liked' => true,
+                    'likes_count' => $likesCount,
+                    'news_id' => $news->id,
+                    'like' => $like
+                ]
+            ], 201);
+        }
+    }
+
+    /**
+     * Obtener todas las noticias que le gustan al usuario
+     */
+    public function myLikedNews()
+    {
+        $user = Auth::user();
+        
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Usuario no autenticado'
+            ], 401);
+        }
+
+        $likedNewsIds = Like::where([
+            'user_id' => $user->id,
+            'likeable_type' => 'App\\Models\\News'
+        ])->pluck('likeable_id');
+
+        $news = News::with(['user', 'newable', 'comments.user'])
+            ->whereIn('id', $likedNewsIds)
+            ->latest('created_at')
+            ->get();
+
+        return response()->json($news);
+    }
+
+    /**
+     * Buscar noticias por título
+     */
+    public function search(Request $request)
+    {
+        $query = $request->get('q', '');
+        
+        if (empty($query)) {
+            return response()->json([
+                'success' => true,
+                'data' => []
+            ]);
+        }
+
+        $news = News::with(['user', 'newable', 'comments.user'])
+            ->where('titulo', 'LIKE', "%{$query}%")
+            ->orWhere('descripcion', 'LIKE', "%{$query}%")
+            ->latest('created_at')
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => $news
+        ]);
+    }
+
+    /**
+     * Verificar si el usuario ha dado like a una noticia
+     */
+    public function checkLike($id)
+    {
+        $user = Auth::user();
+        
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Usuario no autenticado'
+            ], 401);
+        }
+
+        $news = News::find($id);
+
+        if (!$news) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Noticia no encontrada'
+            ], 404);
+        }
+
+        $liked = Like::where([
+            'user_id' => $user->id,
+            'likeable_type' => 'App\\Models\\News',
+            'likeable_id' => $news->id
+        ])->exists();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'liked' => $liked,
+                'news_id' => $news->id
+            ]
+        ]);
+    }
+
+    /**
+     * Obtener noticias por tipo (doctor, lawyer, shop, association)
+     */
+    public function byType($type)
+    {
+        $typeMap = [
+            'doctor'      => 'App\\Models\\Doctor',
+            'lawyer'      => 'App\\Models\\Lawyer',
+            'shop'        => 'App\\Models\\Shop',
+            'association' => 'App\\Models\\Association',
         ];
-        return $map[$type] ?? 'users';
+        
+        if (!isset($typeMap[$type])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Tipo no válido'
+            ], 400);
+        }
+        
+        $news = News::with(['user', 'newable', 'comments.user'])
+            ->where('newable_type', $typeMap[$type])
+            ->latest('created_at')
+            ->get();
+        
+        return response()->json([
+            'success' => true,
+            'data' => $news
+        ]);
+    }
+
+    /**
+     * Obtener noticias destacadas (con más likes)
+     */
+    public function featured()
+    {
+        $news = News::with(['user', 'newable', 'comments.user'])
+            ->withCount('likes')
+            ->having('likes_count', '>', 0)
+            ->orderBy('likes_count', 'desc')
+            ->take(5)
+            ->get();
+        
+        return response()->json([
+            'success' => true,
+            'data' => $news
+        ]);
     }
 
     /**
@@ -447,7 +649,42 @@ public function myAllNews()
     }
 
     /**
-     * Método de depuración para verificar noticias de un usuario
+     * Subir imagen
+     */
+    private function uploadImage($file)
+    {
+        try {
+            $fileName = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+            $path = $file->storeAs("public/news", $fileName);
+            
+            return asset('storage/news/' . $fileName);
+        } catch (\Exception $e) {
+            Log::error('Error uploading news image: ' . $e->getMessage());
+            throw new \Exception('Error al subir la imagen');
+        }
+    }
+
+    /**
+     * Eliminar imagen
+     */
+    private function deleteImage($imagePath)
+    {
+        try {
+            if ($imagePath) {
+                $path = str_replace('/storage/', 'public/', $imagePath);
+                $path = str_replace(asset('/storage/'), 'public/', $imagePath);
+                
+                if (Storage::exists($path)) {
+                    Storage::delete($path);
+                }
+            }
+        } catch (\Exception $e) {
+            Log::error('Error deleting news image: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Método de depuración
      */
     public function debugUserNews($userId)
     {
@@ -506,109 +743,5 @@ public function myAllNews()
         }
 
         return response()->json($debug);
-    }
-/**
-     * Dar like o quitar like a una noticia (toggle)
-     */
-    public function toggleLike($id)
-    {
-        $user = Auth::user();
-        
-        if (!$user) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Usuario no autenticado'
-            ], 401);
-        }
-
-        $news = News::find($id);
-
-        if (!$news) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Noticia no encontrada'
-            ], 404);
-        }
-
-        // Verificar si ya existe el like
-        $existingLike = Like::where([
-            'user_id' => $user->id,
-            'likeable_type' => 'App\\Models\\News',
-            'likeable_id' => $news->id
-        ])->first();
-
-        if ($existingLike) {
-            // Si ya existe, lo eliminamos (quitamos like)
-            $existingLike->delete();
-            
-            // Contar likes actuales
-            $likesCount = Like::where([
-                'likeable_type' => 'App\\Models\\News',
-                'likeable_id' => $news->id
-            ])->count();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Like eliminado',
-                'data' => [
-                    'liked' => false,
-                    'likes_count' => $likesCount,
-                    'news_id' => $news->id
-                ]
-            ]);
-        } else {
-            // Si no existe, lo creamos (damos like)
-            $like = Like::create([
-                'user_id' => $user->id,
-                'likeable_type' => 'App\\Models\\News',
-                'likeable_id' => $news->id
-            ]);
-
-            // Contar likes actuales
-            $likesCount = Like::where([
-                'likeable_type' => 'App\\Models\\News',
-                'likeable_id' => $news->id
-            ])->count();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Like agregado',
-                'data' => [
-                    'liked' => true,
-                    'likes_count' => $likesCount,
-                    'news_id' => $news->id,
-                    'like' => $like
-                ]
-        
-                ], 201);
-            }
-        }
-           /**
-     * Obtener todas las noticias que le gustan al usuario
-     */
-    public function myLikedNews()
-    {
-        $user = Auth::user();
-        
-        if (!$user) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Usuario no autenticado'
-            ], 401);
-        }
-
-        // Obtener IDs de las noticias que le gustan al usuario
-        $likedNewsIds = Like::where([
-            'user_id' => $user->id,
-            'likeable_type' => 'App\\Models\\News'
-        ])->pluck('likeable_id');
-
-        // Obtener las noticias
-        $news = News::with(['newable', 'comments.user'])
-            ->whereIn('id', $likedNewsIds)
-            ->latest('created_at')
-            ->get();
-
-        return response()->json($news);
     }
 }

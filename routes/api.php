@@ -8,7 +8,6 @@ use App\Http\Controllers\API\RoleController;
 use App\Http\Controllers\API\PermissionController;
 use App\Http\Controllers\API\RolePermissionController;
 use App\Http\Controllers\API\UserPermissionController;
-
 use App\Http\Controllers\API\AssociationController;
 use App\Http\Controllers\API\CommentController;
 use App\Http\Controllers\API\DoctorController;
@@ -19,13 +18,12 @@ use App\Http\Controllers\API\ProductController;
 use App\Http\Controllers\API\ServiceController;
 use App\Http\Controllers\API\ShopController;
 use App\Http\Controllers\API\NewsController;
-
 use App\Http\Controllers\API\FavoriteController;
 use App\Http\Controllers\API\HistoryController;
 
 /*
 |--------------------------------------------------------------------------
-| AUTH
+| AUTH - Rutas públicas
 |--------------------------------------------------------------------------
 */
 Route::prefix('auth')->group(function () {
@@ -39,6 +37,7 @@ Route::prefix('auth')->group(function () {
         Route::post('logout', [AuthController::class, 'logout']);
         Route::post('refresh', [AuthController::class, 'refresh']);
         Route::post('change-password', [AuthController::class, 'changePassword']);
+        Route::put('profile', [AuthController::class, 'updateProfile']);
     });
 });
 
@@ -53,6 +52,7 @@ Route::get('lawyers/search', [LawyerController::class, 'search']);
 Route::get('doctors/search', [DoctorController::class, 'search']);
 Route::get('associations/search', [AssociationController::class, 'search']);
 Route::get('shops/search', [ShopController::class, 'search']);
+Route::get('news/search', [NewsController::class, 'search']); // ✅ Agregado
 
 // 🔥 ÚLTIMOS (LATEST) - PÚBLICOS
 Route::get('associations/latest', [AssociationController::class, 'latest']);
@@ -61,6 +61,19 @@ Route::get('lawyers/latest', [LawyerController::class, 'latest']);
 Route::get('shops/latest', [ShopController::class, 'latest']);
 Route::get('products/latest', [ProductController::class, 'latest']);
 Route::get('services/latest', [ServiceController::class, 'latest']);
+Route::get('news/latest', [NewsController::class, 'latest']); // ✅ Ya existe
+
+// 🔥 BY SPECIALTY - PÚBLICOS
+Route::get('doctors/specialty/{specialty}', [DoctorController::class, 'bySpecialty']);
+Route::get('lawyers/specialty/{specialty}', [LawyerController::class, 'bySpecialty']);
+
+// 🔥 NEWS - PÚBLICOS
+Route::prefix('news')->group(function () {
+    Route::get('/', [NewsController::class, 'index']);
+    Route::get('latest', [NewsController::class, 'latest']);
+    Route::get('home', [NewsController::class, 'home']);
+    Route::get('{id}', [NewsController::class, 'show']);
+});
 
 /*
 |--------------------------------------------------------------------------
@@ -119,39 +132,7 @@ Route::middleware('auth:api')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
-    | IMAGE UPLOAD (TRAIT ENDPOINTS) - 🔥 ESTAS RUTAS YA NO SE USAN
-    |--------------------------------------------------------------------------
-    | Estas rutas usaban el método uploadImageByRole del Controller base.
-    | Ahora usamos uploadImageToProduction en cada controlador.
-    | Puedes ELIMINAR estas rutas o dejarlas comentadas.
-    */
-    // Route::post('doctors/upload-image/{id}', function (\Illuminate\Http\Request $request, $id) {
-    //     $doctor = \App\Models\Doctor::findOrFail($id);
-    //     return app(\App\Http\Controllers\Controller::class)
-    //         ->uploadImageByRole($request, $doctor);
-    // });
-
-    // Route::post('lawyers/upload-image/{id}', function (\Illuminate\Http\Request $request, $id) {
-    //     $lawyer = \App\Models\Lawyer::findOrFail($id);
-    //     return app(\App\Http\Controllers\Controller::class)
-    //         ->uploadImageByRole($request, $lawyer);
-    // });
-
-    // Route::post('shops/upload-image/{id}', function (\Illuminate\Http\Request $request, $id) {
-    //     $shop = \App\Models\Shop::findOrFail($id);
-    //     return app(\App\Http\Controllers\Controller::class)
-    //         ->uploadImageByRole($request, $shop);
-    // });
-
-    // Route::post('associations/upload-image/{id}', function (\Illuminate\Http\Request $request, $id) {
-    //     $association = \App\Models\Association::findOrFail($id);
-    //     return app(\App\Http\Controllers\Controller::class)
-    //         ->uploadImageByRole($request, $association);
-    // });
-
-    /*
-    |--------------------------------------------------------------------------
-    | CUSTOM ROUTES (PROTEGIDAS)
+    | CUSTOM ROUTES - ME (PROTEGIDAS)
     |--------------------------------------------------------------------------
     */
     Route::get('associations/me', [AssociationController::class, 'me']);
@@ -173,37 +154,47 @@ Route::middleware('auth:api')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
-    | NEWS ROUTES
+    | ACTUALIZACIÓN DE IMÁGENES - 🔥 RUTAS CORRECTAS
+    |--------------------------------------------------------------------------
+    */
+    Route::post('/doctor/image', [DoctorController::class, 'updateImage']);
+    Route::post('/lawyer/image', [LawyerController::class, 'updateImage']);
+    Route::post('/association/image', [AssociationController::class, 'updateImage']);
+    Route::post('/shop/image', [ShopController::class, 'updateImage']);
+
+    /*
+    |--------------------------------------------------------------------------
+    | 🔥 AVATAR DE USUARIO
+    |--------------------------------------------------------------------------
+    */
+    Route::post('/user/avatar', [AuthController::class, 'updateAvatar']);
+    Route::delete('/user/avatar', [AuthController::class, 'deleteAvatar']);
+
+    /*
+    |--------------------------------------------------------------------------
+    | NEWS ROUTES (PROTEGIDAS - GESTIÓN)
     |--------------------------------------------------------------------------
     */
     Route::prefix('news')->group(function () {
-        Route::get('/', [NewsController::class, 'index']);
-        Route::get('latest', [NewsController::class, 'latest']);
-        Route::get('home', [NewsController::class, 'home']);
-        Route::get('index', [NewsController::class, 'index']);
-        Route::get('{id}', [NewsController::class, 'show']);
-    });
-
-    Route::middleware('auth:api')->prefix('news')->group(function () {
-        Route::get('my/latest', [NewsController::class, 'myLatestNews']);
-        Route::get('my/all', [NewsController::class, 'myAllNews']);
-        Route::get('my/liked', [NewsController::class, 'myLikedNews']);
-        
+        // Rutas de gestión (protegidas)
         Route::post('/', [NewsController::class, 'store']);
         Route::put('{id}', [NewsController::class, 'update']);
         Route::delete('{id}', [NewsController::class, 'destroy']);
         
+        // Rutas de usuario
+        Route::get('my/latest', [NewsController::class, 'myLatestNews']);
+        Route::get('my/all', [NewsController::class, 'myAllNews']);
+        Route::get('my/liked', [NewsController::class, 'myLikedNews']);
+        
+        // Comentarios
         Route::post('{id}/comments', [NewsController::class, 'addComment']);
         
+        // Likes
         Route::post('{id}/like', [NewsController::class, 'toggleLike']);
         Route::get('{id}/check-like', [NewsController::class, 'checkLike']);
         
-        Route::get('debug/{userId}', [NewsController::class, 'debugUserNews']);
-
-
-        // Dentro del grupo 'auth:api'
-Route::post('/user/avatar', [AuthController::class, 'updateAvatar']);
-Route::delete('/user/avatar', [AuthController::class, 'deleteAvatar']);
+        // Depuración (solo admin)
+        Route::middleware('role:admin')->get('debug/{userId}', [NewsController::class, 'debugUserNews']);
     });
 
     /*
@@ -219,26 +210,36 @@ Route::delete('/user/avatar', [AuthController::class, 'deleteAvatar']);
     | POSTS ROUTES
     |--------------------------------------------------------------------------
     */
-    Route::prefix('posts')->group(function () {
-        Route::get('/', [PostController::class, 'index']);
-        Route::get('/home', [PostController::class, 'home']);
-        Route::get('/search', [PostController::class, 'search']);
-        Route::get('/{id}', [PostController::class, 'show']);
-        Route::get('/{id}/likes', [PostController::class, 'getLikes']);
-        Route::get('/{id}/comments', [CommentController::class, 'getPostComments']);
-    });
+Route::prefix('posts')->group(function () {
+    // 📖 PÚBLICAS (GET)
+    Route::get('/', [PostController::class, 'index']);
+    Route::get('/home', [PostController::class, 'home']);
+    Route::get('/search', [PostController::class, 'search']);
+    Route::get('/{id}', [PostController::class, 'show']);
+    Route::get('/{id}/likes', [PostController::class, 'getLikes']);
+    Route::get('/{id}/comments', [CommentController::class, 'getPostComments']);
 
-    Route::middleware('auth:api')->prefix('posts')->group(function () {
+    // 🔒 PROTEGIDAS (requieren autenticación)
+    Route::middleware('auth:api')->group(function () {
+        // 📝 CRUD
         Route::post('/', [PostController::class, 'store']);
         Route::put('/{id}', [PostController::class, 'update']);
         Route::delete('/{id}', [PostController::class, 'destroy']);
         
+        // 🖼️ IMAGEN
+        Route::post('/{id}/image', [PostController::class, 'updateImage']);
+        
+        // 👤 MIS POSTS
+        Route::get('/my/latest', [PostController::class, 'myLatestPosts']);
+        
+        // 💬 COMENTARIOS
         Route::post('/{id}/comments', [PostController::class, 'addComment']);
         Route::delete('/comments/{id}', [PostController::class, 'deleteComment']);
         
+        // ❤️ LIKES
         Route::post('/{id}/like', [PostController::class, 'toggleLike']);
     });
-
+});
     /*
     |--------------------------------------------------------------------------
     | PRODUCTS ROUTES - COMENTARIOS
@@ -263,24 +264,6 @@ Route::delete('/user/avatar', [AuthController::class, 'deleteAvatar']);
 
     Route::delete('/service-comments/{id}', [CommentController::class, 'deleteServiceComment']);
 
-    /*
-    |--------------------------------------------------------------------------
-    | ACTUALIZACIÓN DE IMÁGENES - 🔥 RUTAS CORRECTAS
-    |--------------------------------------------------------------------------
-    | Estas rutas usan los métodos updateImage de cada controlador
-    | que ahora usan el trait UploadImage
-    */
-    Route::post('/doctor/image', [DoctorController::class, 'updateImage']);
-    Route::post('/lawyer/image', [LawyerController::class, 'updateImage']);
-    Route::post('/association/image', [AssociationController::class, 'updateImage']);
-    Route::post('/shop/image', [ShopController::class, 'updateImage']);
-    /*
-    |--------------------------------------------------------------------------
-    | 🔥 AVATAR DE USUARIO (DEBE ESTAR AQUÍ, NO DENTRO DE NEWS)
-    |--------------------------------------------------------------------------
-    */
-    Route::post('/user/avatar', [AuthController::class, 'updateAvatar']);
-    Route::delete('/user/avatar', [AuthController::class, 'deleteAvatar']);
     /*
     |--------------------------------------------------------------------------
     | FAVORITES
@@ -309,7 +292,6 @@ Route::delete('/user/avatar', [AuthController::class, 'deleteAvatar']);
     */
     Route::get('/my-posts/latestPosts', [PostController::class, 'myLatestPosts']);
     Route::get('/my-services/latestServices', [ServiceController::class, 'myLatestServices']);
-
 });
 
 /*

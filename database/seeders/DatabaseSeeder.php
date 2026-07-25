@@ -8,27 +8,24 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
+        // 🔥 PRIMERO: Crear roles y permisos
+        $this->call(RoleSeeder::class);
+        
+        // 🔥 SEGUNDO: Crear usuarios
+        $this->call(UserSeeder::class);
+        
+        // 🔥 TERCERO: Datos adicionales
         $this->call([
-
-            // 1️⃣ Seguridad / base
-            RolePermissionSeeder::class,
-            UserSeeder::class,
-
-            // 2️⃣ Entidades principales (dependen de users)
-            ShopSeeder::class,
-            AssociationSeeder::class,
             DoctorSeeder::class,
             LawyerSeeder::class,
-
-            // 3️⃣ Contenido dependiente
+            AssociationSeeder::class,
+            ShopSeeder::class,
+            PostSeeder::class,
+            CommentSeeder::class,
+            FeedbackSeeder::class,
             ProductSeeder::class,
             ServiceSeeder::class,
-
-            // 4️⃣ Contenido polimórfico / social
-            PostSeeder::class,
             NewsSeeder::class,
-            FeedbackSeeder::class,
-            CommentSeeder::class,
         ]);
     }
 }

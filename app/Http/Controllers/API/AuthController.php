@@ -55,14 +55,17 @@ class AuthController extends Controller
             'current_token' => $token
         ]);
 
-        // Cargar perfiles del usuario
+        // Cargar perfiles del usuario con todos los campos
         $user->load(['doctor', 'lawyer', 'association', 'shop']);
+
+        // Formatear la respuesta del usuario con todos los datos
+        $formattedUser = $this->formatUserResponse($user);
 
         return response()->json([
             'access_token' => $token,
             'token_type' => 'Bearer',
             'expires_in' => auth()->factory()->getTTL() * 60,
-            'user' => $user,
+            'user' => $formattedUser,
         ]);
     }
 
@@ -76,27 +79,32 @@ class AuthController extends Controller
             'name'     => 'required|string|max:255',
             'email'    => 'required|email|unique:users,email',
             'password' => 'required|confirmed|min:8',
+            'phone'    => 'nullable|string|max:20', // ✅ Teléfono para usuario
+            'dni'      => 'nullable|string|max:20', // ✅ DNI opcional
         ]);
 
-        $user = User::create([
+        $userData = [
             'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
-        ]);
+            'phone' => $request->phone,      // ✅ Guardar teléfono
+            'dni' => $request->dni,          // ✅ Guardar DNI
+        ];
+
+        $user = User::create($userData);
 
         // 🔍 DETECCIÓN POR CAMPO
-        if ($request->dni) {
-            // USUARIO NORMAL
-            $user->update(['dni' => $request->dni]);
-        } 
-        elseif ($request->licencia) {
+        if ($request->licencia) {
             // ABOGADO: se requiere first_name y last_name
             Lawyer::create([
                 'user_id'     => $user->id,
                 'first_name'  => $request->first_name ?? $request->name,
                 'last_name'   => $request->last_name ?? '',
                 'license_code'=> $request->licencia,
+                'phone'       => $request->phone ?? null,
+                'office_phone'=> $request->office_phone ?? null,
             ]);
+            $user->assignRole('lawyer');
         } 
         elseif ($request->codigoDoctor) {
             // DOCTOR: el campo en BD es graduation_code
@@ -107,7 +115,11 @@ class AuthController extends Controller
                 'degree'          => $request->degree ?? 'Médico',
                 'specialty'       => $request->specialty ?? 'General',
                 'graduation_code' => $request->codigoDoctor,
+                'phone'           => $request->phone ?? null,
+                'emergency_phone' => $request->emergency_phone ?? null,
+                'clinic_phone'    => $request->clinic_phone ?? null,
             ]);
+            $user->assignRole('doctor');
         } 
         elseif ($request->ruc) {
             if ($request->type === 'asociacion') {
@@ -115,15 +127,22 @@ class AuthController extends Controller
                     'user_id' => $user->id,
                     'name'    => $request->name,
                     'ruc'     => $request->ruc,
+                    'phone'   => $request->phone ?? null,
                 ]);
+                $user->assignRole('association');
             }
             if ($request->type === 'tienda') {
                 Shop::create([
                     'user_id' => $user->id,
                     'name'    => $request->name,
                     'ruc'     => $request->ruc,
+                    'phone'   => $request->phone ?? null,
                 ]);
+                $user->assignRole('shop');
             }
+        } else {
+            // ✅ Usuario normal
+            $user->assignRole('user');
         }
 
         $token = Auth::guard('api')->login($user);
@@ -131,34 +150,65 @@ class AuthController extends Controller
         // Cargar perfiles del usuario
         $user->load(['doctor', 'lawyer', 'association', 'shop']);
 
+        // Formatear la respuesta del usuario con todos los datos
+        $formattedUser = $this->formatUserResponse($user);
+
         return response()->json([
             'message' => 'Registro exitoso',
             'access_token' => $token,
             'token_type' => 'Bearer',
             'expires_in' => Auth::guard('api')->factory()->getTTL() * 60,
-            'user' => $user
+            'user' => $formattedUser
         ], 201);
     }
 
     /* =======================
      | ME
      ======================= */
-    public function me()
-    {
-        $user = Auth::guard('api')->user();
 
-        if (!$user) {
-            return response()->json([
-                'message' => 'Usuario no autenticado'
-            ], 401);
-        }
+public function me()
+{
+    $user = Auth::guard('api')->user();
 
-        // Cargar perfiles del usuario con with
-        $user = User::with(['doctor', 'lawyer', 'association', 'shop'])->find($user->id);
-
-        return response()->json($user);
+    if (!$user) {
+        return response()->json([
+            'message' => 'Usuario no autenticado'
+        ], 401);
     }
+
+    // Asegurar que todos los campos estén incluidos
+    $userData = $user->toArray();
     
+    // ✅ Asegurar que estos campos existan en la respuesta
+    $userData['phone'] = $user->phone ?? '';
+    $userData['dni'] = $user->dni ?? '';
+    $userData['address'] = $user->address ?? '';
+    $userData['city'] = $user->city ?? '';
+    $userData['avatar_url'] = $user->avatar_url;
+
+    // Cargar perfiles del usuario
+    $user->load(['doctor', 'lawyer', 'association', 'shop']);
+    
+    // Si tiene perfil, agregar sus datos
+    if ($user->doctor) {
+        $userData['profile_type'] = 'doctor';
+        $userData['profile'] = $user->doctor;
+    } elseif ($user->lawyer) {
+        $userData['profile_type'] = 'lawyer';
+        $userData['profile'] = $user->lawyer;
+    } elseif ($user->association) {
+        $userData['profile_type'] = 'association';
+        $userData['profile'] = $user->association;
+    } elseif ($user->shop) {
+        $userData['profile_type'] = 'shop';
+        $userData['profile'] = $user->shop;
+    } else {
+        $userData['profile_type'] = 'user';
+        $userData['profile'] = null;
+    }
+
+    return response()->json($userData);
+}
     /* =======================
      | LOGOUT
      ======================= */
@@ -177,11 +227,14 @@ class AuthController extends Controller
         $user = Auth::guard('api')->user();
         $user->load(['doctor', 'lawyer', 'association', 'shop']);
 
+        // Formatear la respuesta del usuario con todos los datos
+        $formattedUser = $this->formatUserResponse($user);
+
         return response()->json([
             'access_token' => Auth::guard('api')->refresh(),
             'token_type' => 'Bearer',
             'expires_in' => Auth::guard('api')->factory()->getTTL() * 60,
-            'user' => $user,
+            'user' => $formattedUser,
         ]);
     }
 
@@ -255,7 +308,52 @@ class AuthController extends Controller
     }
 
     /* =======================
-     | ✅ ACTUALIZAR AVATAR (NUEVO)
+     | ✅ ACTUALIZAR PERFIL DE USUARIO
+     ======================= */
+    
+    public function updateProfile(Request $request)
+    {
+        $user = Auth::user();
+
+        if (!$user) {
+            return response()->json([
+                'message' => 'Usuario no autenticado'
+            ], 401);
+        }
+
+        $request->validate([
+            'name'    => 'sometimes|string|max:255',
+            'email'   => 'sometimes|email|unique:users,email,' . $user->id,
+            'phone'   => 'nullable|string|max:20',
+            'dni'     => 'nullable|string|max:20',
+            'address' => 'nullable|string|max:255',
+            'city'    => 'nullable|string|max:100',
+        ]);
+
+        $user->update($request->only([
+            'name',
+            'email',
+            'phone',
+            'dni',
+            'address',
+            'city'
+        ]));
+
+        // Recargar usuario con perfiles
+        $user->load(['doctor', 'lawyer', 'association', 'shop']);
+
+        // Formatear la respuesta del usuario con todos los datos
+        $formattedUser = $this->formatUserResponse($user);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Perfil actualizado correctamente',
+            'data' => $formattedUser
+        ], 200);
+    }
+
+    /* =======================
+     | ✅ ACTUALIZAR AVATAR
      ======================= */
     
     public function updateAvatar(Request $request)
@@ -298,12 +396,15 @@ class AuthController extends Controller
             // Recargar usuario con perfiles
             $user->load(['doctor', 'lawyer', 'association', 'shop']);
 
+            // Formatear la respuesta del usuario con todos los datos
+            $formattedUser = $this->formatUserResponse($user);
+
             return response()->json([
                 'success' => true,
                 'message' => 'Avatar actualizado correctamente',
                 'data' => [
                     'avatar' => $avatarUrl,
-                    'user' => $user
+                    'user' => $formattedUser
                 ]
             ], 200);
 
@@ -318,7 +419,7 @@ class AuthController extends Controller
     }
 
     /* =======================
-     | ✅ ELIMINAR AVATAR (NUEVO)
+     | ✅ ELIMINAR AVATAR
      ======================= */
     
     public function deleteAvatar(Request $request)
@@ -346,10 +447,13 @@ class AuthController extends Controller
             // Recargar usuario con perfiles
             $user->load(['doctor', 'lawyer', 'association', 'shop']);
 
+            // Formatear la respuesta del usuario con todos los datos
+            $formattedUser = $this->formatUserResponse($user);
+
             return response()->json([
                 'success' => true,
                 'message' => 'Avatar eliminado correctamente',
-                'data' => $user
+                'data' => $formattedUser
             ], 200);
 
         } catch (\Exception $e) {
@@ -363,6 +467,45 @@ class AuthController extends Controller
     }
 
     /* =======================
+     | 🔥 FORMATO DE RESPUESTA DEL USUARIO
+     ======================= */
+    
+    /**
+     * Formatea la respuesta del usuario incluyendo todos los campos de los perfiles
+     */
+    private function formatUserResponse($user)
+    {
+        $userData = $user->toArray();
+
+        // Añadir campos específicos según el perfil
+        if ($user->doctor) {
+            $userData['profile_type'] = 'doctor';
+            $userData['profile'] = $user->doctor->toArray();
+            // Añadir teléfonos formateados si existen
+            $userData['profile']['formatted_phone'] = $user->doctor->formatted_phone;
+            $userData['profile']['formatted_emergency_phone'] = $user->doctor->formatted_emergency_phone;
+            $userData['profile']['formatted_clinic_phone'] = $user->doctor->formatted_clinic_phone;
+        } elseif ($user->lawyer) {
+            $userData['profile_type'] = 'lawyer';
+            $userData['profile'] = $user->lawyer->toArray();
+            // Añadir teléfonos formateados si existen
+            $userData['profile']['formatted_phone'] = $user->lawyer->formatted_phone;
+            $userData['profile']['formatted_office_phone'] = $user->lawyer->formatted_office_phone;
+        } elseif ($user->association) {
+            $userData['profile_type'] = 'association';
+            $userData['profile'] = $user->association->toArray();
+        } elseif ($user->shop) {
+            $userData['profile_type'] = 'shop';
+            $userData['profile'] = $user->shop->toArray();
+        } else {
+            $userData['profile_type'] = 'user';
+            $userData['profile'] = null;
+        }
+
+        return $userData;
+    }
+
+    /* =======================
      | RESPUESTA TOKEN
      ======================= */
     protected function respondWithToken($token)
@@ -370,11 +513,14 @@ class AuthController extends Controller
         $user = Auth::guard('api')->user();
         $user->load(['doctor', 'lawyer', 'association', 'shop']);
 
+        // Formatear la respuesta del usuario con todos los datos
+        $formattedUser = $this->formatUserResponse($user);
+
         return response()->json([
             'access_token' => $token,
             'token_type'   => 'Bearer',
             'expires_in'   => Auth::guard('api')->factory()->getTTL() * 60,
-            'user'         => $user,
+            'user'         => $formattedUser,
         ]);
     }
 }

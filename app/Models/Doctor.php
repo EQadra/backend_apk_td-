@@ -21,17 +21,22 @@ class Doctor extends Model
         'graduation_code',
         'city',
         'university',
-        'services',   // ⭐ necesario
-        'rating',     // ⭐ necesario
+        'services',
+        'rating',
         'image',
         'schedule',
+        // Nuevos campos de teléfono
+        'phone',
+        'emergency_phone',
+        'clinic_phone',
     ];
 
     protected $casts = [
-        'services' => 'array', // ⭐ evita "Array to string conversion"
+        'services' => 'array',
         'rating'   => 'float',
     ];
 
+    // Relaciones
     public function user()
     {
         return $this->belongsTo(User::class);
@@ -42,13 +47,11 @@ class Doctor extends Model
         return $this->morphMany(Feedback::class, 'feedbackable');
     }
 
-    // ✅ Relación polimórfica corregida
     public function posts()
     {
         return $this->morphMany(Post::class, 'postable');
     }
 
-    // 🔥 Renombrada para evitar choque con atributo "services"
     public function services()
     {
         return $this->morphMany(Service::class, 'serviceable');
@@ -59,7 +62,23 @@ class Doctor extends Model
         return $this->morphMany(News::class, 'newable');
     }
 
-    protected $appends = ['image_url'];
+    public function comments()
+    {
+        return $this->hasMany(Comment::class);
+    }
+
+    public function favorites()
+    {
+        return $this->morphMany(Favorite::class, 'favoritable');
+    }
+
+    public function histories()
+    {
+        return $this->morphMany(History::class, 'historyable');
+    }
+
+    // Accessors
+    protected $appends = ['image_url', 'formatted_phone', 'formatted_emergency_phone', 'formatted_clinic_phone'];
 
     public function getImageUrlAttribute()
     {
@@ -70,19 +89,48 @@ class Doctor extends Model
         return asset('storage/' . $this->image);
     }
 
-    public function comments()
+    // Formatear teléfonos
+    public function getFormattedPhoneAttribute()
     {
-        return $this->hasMany(Comment::class);
+        return $this->formatPhoneNumber($this->phone);
     }
 
-    
-public function favorites()
-{
-    return $this->morphMany(Favorite::class, 'favoritable');
-}
+    public function getFormattedEmergencyPhoneAttribute()
+    {
+        return $this->formatPhoneNumber($this->emergency_phone);
+    }
 
-public function histories()
-{
-    return $this->morphMany(History::class, 'historyable');
-}
+    public function getFormattedClinicPhoneAttribute()
+    {
+        return $this->formatPhoneNumber($this->clinic_phone);
+    }
+
+    // Método privado para formatear números de teléfono
+    private function formatPhoneNumber($phone)
+    {
+        if (!$phone) return null;
+        
+        // Limpiar el número: solo dígitos
+        $cleaned = preg_replace('/[^0-9]/', '', $phone);
+        
+        // Formato para Perú
+        if (strlen($cleaned) === 9) {
+            return substr($cleaned, 0, 3) . ' ' . substr($cleaned, 3, 3) . ' ' . substr($cleaned, 6);
+        }
+        
+        if (strlen($cleaned) === 8) {
+            return substr($cleaned, 0, 2) . ' ' . substr($cleaned, 2, 3) . ' ' . substr($cleaned, 5);
+        }
+        
+        return $phone;
+    }
+
+    // Scopes
+    public function scopeWithPhone($query, $phone)
+    {
+        $cleaned = preg_replace('/[^0-9]/', '', $phone);
+        return $query->where('phone', 'LIKE', "%{$cleaned}%")
+                     ->orWhere('emergency_phone', 'LIKE', "%{$cleaned}%")
+                     ->orWhere('clinic_phone', 'LIKE', "%{$cleaned}%");
+    }
 }

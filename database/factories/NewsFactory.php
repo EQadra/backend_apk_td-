@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\News;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 class NewsFactory extends Factory
@@ -12,14 +13,14 @@ class NewsFactory extends Factory
     public function definition(): array
     {
         return [
-            'titulo' => $this->faker->sentence(),
-            'descripcion' => $this->faker->paragraph(4),
+            'user_id' => User::factory(), // ✅ Asignar usuario automáticamente
+            'titulo' => $this->faker->sentence(6),
+            'descripcion' => $this->faker->paragraph(3),
             'url' => $this->faker->url(),
+            'image' => 'https://picsum.photos/seed/' . $this->faker->numberBetween(1, 1000) . '/800/400',
             'fecha_publicacion' => $this->faker->dateTimeBetween('-1 year', 'now'),
-
-            // Campos polimórficos se llenan en el seeder
-            'newable_id' => null,
             'newable_type' => null,
+            'newable_id' => null,
         ];
     }
 }

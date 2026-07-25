@@ -10,9 +10,11 @@ class News extends Model
     use HasFactory;
 
     protected $fillable = [
+        'user_id',          // ✅ Nuevo: para usuarios normales
         'titulo',
         'descripcion',
         'url',
+        'image',
         'fecha_publicacion',
         'newable_type',
         'newable_id',
@@ -22,26 +24,50 @@ class News extends Model
         'fecha_publicacion' => 'datetime',
     ];
 
+    protected $appends = ['image_url'];
 
+    public function getImageUrlAttribute()
+    {
+        if (!$this->image) {
+            return null;
+        }
+
+        if (filter_var($this->image, FILTER_VALIDATE_URL)) {
+            return $this->image;
+        }
+
+        return asset('storage/' . $this->image);
+    }
+
+    // ✅ Relación con el usuario que creó la noticia
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    // ✅ Relación polimórfica con el perfil (opcional)
     public function newable()
     {
         return $this->morphTo();
     }
 
-    // 🔥 comentarios
-public function comments()
-{
-    return $this->morphMany(\App\Models\Comment::class, 'commentable');
-}
+    public function comments()
+    {
+        return $this->morphMany(Comment::class, 'commentable');
+    }
 
+    public function likes()
+    {
+        return $this->morphMany(Like::class, 'likeable');
+    }
 
     public function favorites()
-{
-    return $this->morphMany(Favorite::class, 'favoritable');
-}
+    {
+        return $this->morphMany(Favorite::class, 'favoritable');
+    }
 
-public function histories()
-{
-    return $this->morphMany(History::class, 'historyable');
-}
+    public function histories()
+    {
+        return $this->morphMany(History::class, 'historyable');
+    }
 }
