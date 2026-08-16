@@ -10,11 +10,15 @@ use Illuminate\Support\Facades\Auth;
 class FeedbackController extends Controller
 {
     /**
-     * Display all feedbacks (admin or owner view).
+     * Display feedbacks of the authenticated user.
      */
     public function index()
     {
-        $feedbacks = Feedback::with(['user', 'feedbackable'])->latest()->get();
+        $feedbacks = Feedback::with(['user', 'feedbackable'])
+            ->where('user_id', Auth::id())
+            ->latest()
+            ->get();
+
         return response()->json($feedbacks, 200);
     }
 
@@ -51,6 +55,12 @@ class FeedbackController extends Controller
     public function show($id)
     {
         $feedback = Feedback::with(['user', 'feedbackable'])->findOrFail($id);
+
+        // Opcional: solo permitir ver el propio feedback
+        if ($feedback->user_id !== Auth::id() && !Auth::user()?->hasRole('admin')) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
         return response()->json($feedback, 200);
     }
 

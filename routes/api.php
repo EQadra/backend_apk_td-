@@ -210,36 +210,37 @@ Route::middleware('auth:api')->group(function () {
     | POSTS ROUTES
     |--------------------------------------------------------------------------
     */
-Route::prefix('posts')->group(function () {
-    // 📖 PÚBLICAS (GET)
-    Route::get('/', [PostController::class, 'index']);
-    Route::get('/home', [PostController::class, 'home']);
-    Route::get('/search', [PostController::class, 'search']);
-    Route::get('/{id}', [PostController::class, 'show']);
-    Route::get('/{id}/likes', [PostController::class, 'getLikes']);
-    Route::get('/{id}/comments', [CommentController::class, 'getPostComments']);
+    Route::prefix('posts')->group(function () {
+        // 📖 PÚBLICAS (GET)
+        Route::get('/', [PostController::class, 'index']);
+        Route::get('/home', [PostController::class, 'home']);
+        Route::get('/search', [PostController::class, 'search']);
+        Route::get('/{id}', [PostController::class, 'show']);
+        Route::get('/{id}/likes', [PostController::class, 'getLikes']);
+        Route::get('/{id}/comments', [CommentController::class, 'getPostComments']);
 
-    // 🔒 PROTEGIDAS (requieren autenticación)
-    Route::middleware('auth:api')->group(function () {
-        // 📝 CRUD
-        Route::post('/', [PostController::class, 'store']);
-        Route::put('/{id}', [PostController::class, 'update']);
-        Route::delete('/{id}', [PostController::class, 'destroy']);
-        
-        // 🖼️ IMAGEN
-        Route::post('/{id}/image', [PostController::class, 'updateImage']);
-        
-        // 👤 MIS POSTS
-        Route::get('/my/latest', [PostController::class, 'myLatestPosts']);
-        
-        // 💬 COMENTARIOS
-        Route::post('/{id}/comments', [PostController::class, 'addComment']);
-        Route::delete('/comments/{id}', [PostController::class, 'deleteComment']);
-        
-        // ❤️ LIKES
-        Route::post('/{id}/like', [PostController::class, 'toggleLike']);
+        // 🔒 PROTEGIDAS (requieren autenticación)
+        Route::middleware('auth:api')->group(function () {
+            // 📝 CRUD
+            Route::post('/', [PostController::class, 'store']);
+            Route::put('/{id}', [PostController::class, 'update']);
+            Route::delete('/{id}', [PostController::class, 'destroy']);
+            
+            // 🖼️ IMAGEN
+            Route::post('/{id}/image', [PostController::class, 'updateImage']);
+            
+            // 👤 MIS POSTS
+            Route::get('/my/latest', [PostController::class, 'myLatestPosts']);
+            
+            // 💬 COMENTARIOS
+            Route::post('/{id}/comments', [PostController::class, 'addComment']);
+            Route::delete('/comments/{id}', [PostController::class, 'deleteComment']);
+            
+            // ❤️ LIKES
+            Route::post('/{id}/like', [PostController::class, 'toggleLike']);
+        });
     });
-});
+
     /*
     |--------------------------------------------------------------------------
     | PRODUCTS ROUTES - COMENTARIOS
@@ -258,8 +259,13 @@ Route::prefix('posts')->group(function () {
     |--------------------------------------------------------------------------
     */
     Route::middleware('auth:api')->prefix('services')->group(function () {
-        Route::get('/{serviceId}/comments', [CommentController::class, 'getServiceComments']);
-        Route::post('/{serviceId}/comments', [CommentController::class, 'storeServiceComment']);
+        // ✅ RUTAS DE IMÁGENES - AGREGADAS
+        Route::post('{id}/image', [ServiceController::class, 'updateImage']);
+        Route::delete('{id}/image', [ServiceController::class, 'deleteImage']);
+        
+        // Comentarios (ya existentes)
+        Route::get('{serviceId}/comments', [CommentController::class, 'getServiceComments']);
+        Route::post('{serviceId}/comments', [CommentController::class, 'storeServiceComment']);
     });
 
     Route::delete('/service-comments/{id}', [CommentController::class, 'deleteServiceComment']);

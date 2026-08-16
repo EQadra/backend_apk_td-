@@ -2,15 +2,15 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 
 class News extends Model
 {
     use HasFactory;
 
     protected $fillable = [
-        'user_id',          // ✅ Nuevo: para usuarios normales
+        'user_id',
         'titulo',
         'descripcion',
         'url',
@@ -24,8 +24,69 @@ class News extends Model
         'fecha_publicacion' => 'datetime',
     ];
 
-    protected $appends = ['image_url'];
+    protected $appends = [
+        'image_url',
+    ];
 
+    /**
+     * Usuario que creó la noticia
+     */
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Perfil asociado a la noticia.
+     *
+     * Puede ser:
+     * Doctor
+     * Lawyer
+     * Shop
+     * Association
+     *
+     * También puede ser NULL.
+     */
+    public function newable()
+    {
+        return $this->morphTo();
+    }
+
+    /**
+     * Comentarios de la noticia
+     */
+    public function comments()
+    {
+        return $this->morphMany(Comment::class, 'commentable');
+    }
+
+    /**
+     * Likes de la noticia
+     */
+    public function likes()
+    {
+        return $this->morphMany(Like::class, 'likeable');
+    }
+
+    /**
+     * Favoritos
+     */
+    public function favorites()
+    {
+        return $this->morphMany(Favorite::class, 'favoritable');
+    }
+
+    /**
+     * Historial
+     */
+    public function histories()
+    {
+        return $this->morphMany(History::class, 'historyable');
+    }
+
+    /**
+     * URL pública de la imagen
+     */
     public function getImageUrlAttribute()
     {
         if (!$this->image) {
@@ -36,38 +97,6 @@ class News extends Model
             return $this->image;
         }
 
-        return asset('storage/' . $this->image);
-    }
-
-    // ✅ Relación con el usuario que creó la noticia
-    public function user()
-    {
-        return $this->belongsTo(User::class);
-    }
-
-    // ✅ Relación polimórfica con el perfil (opcional)
-    public function newable()
-    {
-        return $this->morphTo();
-    }
-
-    public function comments()
-    {
-        return $this->morphMany(Comment::class, 'commentable');
-    }
-
-    public function likes()
-    {
-        return $this->morphMany(Like::class, 'likeable');
-    }
-
-    public function favorites()
-    {
-        return $this->morphMany(Favorite::class, 'favoritable');
-    }
-
-    public function histories()
-    {
-        return $this->morphMany(History::class, 'historyable');
+        return asset('storage/' . ltrim($this->image, '/'));
     }
 }

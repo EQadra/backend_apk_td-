@@ -14,6 +14,7 @@ return [
         'http://localhost:5173',
         'http://127.0.0.1:5173',
         'https://apiapk.tudealer.app',
+        'http://10.4.166.163:8000', 
     ],
 
     'allowed_origins_patterns' => [],

@@ -115,90 +115,126 @@ class ProductController extends Controller
      * PUT /api/products/{id}
      * Actualizar un producto
      */
-    public function update(Request $request, $id)
-    {
-        try {
-            $product = Product::findOrFail($id);
+public function update(Request $request, $id)
+{
+    try {
+        $product = Product::findOrFail($id);
 
-            $request->validate([
-                'name'        => 'nullable|string|max:255',
-                'description' => 'nullable|string',
-                'price'       => 'nullable|numeric',
-                'stock'       => 'nullable|integer',
-                'image'       => 'nullable|image|mimes:jpg,jpeg,png,webp|max:4096',
-            ]);
-
-            // 🔥 Si sube nueva imagen: borrar antigua + guardar nueva
-            if ($request->hasFile('image')) {
-                // Eliminar imagen anterior usando el trait
-                $this->deleteImageFromProduction($product->image);
-                
-                $file = $request->file('image');
-                $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
-                $destinationPath = '/home1/icjmeomy/apiapk.tudealer.app/public/imagenes_app/productos';
-                
-                if (!file_exists($destinationPath)) {
-                    mkdir($destinationPath, 0755, true);
-                }
-                
-                $file->move($destinationPath, $filename);
-                $imageUrl = 'https://apiapk.tudealer.app/imagenes_app/productos/' . $filename;
-                
-                $product->image = $imageUrl;
+        // ✅ VERIFICACIÓN DE PERMISOS
+        $user = Auth::user();
+        $isAdmin = $user->hasRole('admin');
+        
+        // Obtener el dueño del producto (tienda o asociación)
+        $isOwner = false;
+        if ($product->productable) {
+            // Verificar si el usuario es dueño del perfil (shop o association)
+            if (isset($product->productable->user_id)) {
+                $isOwner = $product->productable->user_id === $user->id;
             }
-
-            // Si viene imagen como string (base64 o URL)
-            if ($request->has('image') && is_string($request->image)) {
-                $product->image = $request->image;
-            }
-
-            $product->update([
-                'name'        => $request->name ?? $product->name,
-                'description' => $request->description ?? $product->description,
-                'price'       => $request->price ?? $product->price,
-                'stock'       => $request->stock ?? $product->stock,
-            ]);
-
-            return response()->json([
-                'message' => 'Producto actualizado',
-                'data'    => $product
-            ]);
-
-        } catch (Exception $e) {
-            Log::error('Product update error: ' . $e->getMessage());
-            return response()->json([
-                'error'   => 'Error al actualizar producto',
-                'message' => $e->getMessage()
-            ], 500);
         }
-    }
 
+        if (!$isOwner && !$isAdmin) {
+            return response()->json([
+                'message' => 'No autorizado para editar este producto'
+            ], 403);
+        }
+
+        $request->validate([
+            'name'        => 'nullable|string|max:255',
+            'description' => 'nullable|string',
+            'price'       => 'nullable|numeric',
+            'stock'       => 'nullable|integer',
+            'image'       => 'nullable|image|mimes:jpg,jpeg,png,webp|max:4096',
+        ]);
+
+        // Si sube nueva imagen: borrar antigua + guardar nueva
+        if ($request->hasFile('image')) {
+            // Eliminar imagen anterior
+            $this->deleteImageFromProduction($product->image);
+            
+            $file = $request->file('image');
+            $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+            $destinationPath = '/home1/icjmeomy/apiapk.tudealer.app/public/imagenes_app/productos';
+            
+            if (!file_exists($destinationPath)) {
+                mkdir($destinationPath, 0755, true);
+            }
+            
+            $file->move($destinationPath, $filename);
+            $imageUrl = 'https://apiapk.tudealer.app/imagenes_app/productos/' . $filename;
+            
+            $product->image = $imageUrl;
+        }
+
+        // Si viene imagen como string (base64 o URL)
+        if ($request->has('image') && is_string($request->image)) {
+            $product->image = $request->image;
+        }
+
+        $product->update([
+            'name'        => $request->name ?? $product->name,
+            'description' => $request->description ?? $product->description,
+            'price'       => $request->price ?? $product->price,
+            'stock'       => $request->stock ?? $product->stock,
+        ]);
+
+        return response()->json([
+            'message' => 'Producto actualizado',
+            'data'    => $product
+        ]);
+
+    } catch (Exception $e) {
+        Log::error('Product update error: ' . $e->getMessage());
+        return response()->json([
+            'error'   => 'Error al actualizar producto',
+            'message' => $e->getMessage()
+        ], 500);
+    }
+}
     /**
      * DELETE /api/products/{id}
      * Eliminar un producto
      */
-    public function destroy($id)
-    {
-        try {
-            $product = Product::findOrFail($id);
+public function destroy($id)
+{
+    try {
+        $product = Product::findOrFail($id);
 
-            // 🔥 Eliminar imagen usando el trait
-            $this->deleteImageFromProduction($product->image);
-
-            $product->delete();
-
-            return response()->json([
-                'message' => 'Producto eliminado correctamente'
-            ]);
-
-        } catch (Exception $e) {
-            Log::error('Product delete error: ' . $e->getMessage());
-            return response()->json([
-                'error'   => 'Error al eliminar producto',
-                'message' => $e->getMessage()
-            ], 500);
+        // ✅ VERIFICACIÓN DE PERMISOS
+        $user = Auth::user();
+        $isAdmin = $user->hasRole('admin');
+        
+        // Obtener el dueño del producto (tienda o asociación)
+        $isOwner = false;
+        if ($product->productable) {
+            if (isset($product->productable->user_id)) {
+                $isOwner = $product->productable->user_id === $user->id;
+            }
         }
+
+        if (!$isOwner && !$isAdmin) {
+            return response()->json([
+                'message' => 'No autorizado para eliminar este producto'
+            ], 403);
+        }
+
+        // Eliminar imagen
+        $this->deleteImageFromProduction($product->image);
+
+        $product->delete();
+
+        return response()->json([
+            'message' => 'Producto eliminado correctamente'
+        ]);
+
+    } catch (Exception $e) {
+        Log::error('Product delete error: ' . $e->getMessage());
+        return response()->json([
+            'error'   => 'Error al eliminar producto',
+            'message' => $e->getMessage()
+        ], 500);
     }
+}
 
     /**
      * GET /api/products/latest

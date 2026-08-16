@@ -177,94 +177,170 @@ class PostController extends Controller
      * PUT /api/posts/{id}
      * Actualizar post
      */
+    // public function update(Request $request, $id)
+    // {
+    //     $post = Post::findOrFail($id);
+
+    //     // Verificar permisos
+    //     if ($post->user_id !== Auth::id() && !Auth::user()->hasRole('admin')) {
+    //         return response()->json([
+    //             'message' => 'No autorizado para editar este post'
+    //         ], 403);
+    //     }
+
+    //     $request->validate([
+    //         'title'    => 'sometimes|required|string|max:255',
+    //         'content'  => 'sometimes|required|string',
+    //         'image'    => 'nullable|image|mimes:jpg,jpeg,png,webp|max:4096',
+    //         'category' => 'nullable|string|max:100',
+    //     ]);
+
+    //     // Actualizar imagen si se envía una nueva
+    //     if ($request->hasFile('image')) {
+    //         // Eliminar imagen anterior si existe
+    //         if ($post->image) {
+    //             $this->deleteImageFromProduction($post->image);
+    //         }
+
+    //         $file = $request->file('image');
+    //         $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+    //         $destinationPath = '/home1/icjmeomy/apiapk.tudealer.app/public/imagenes_app/posts';
+            
+    //         if (!file_exists($destinationPath)) {
+    //             mkdir($destinationPath, 0755, true);
+    //         }
+            
+    //         $file->move($destinationPath, $filename);
+    //         $imageUrl = 'https://apiapk.tudealer.app/imagenes_app/posts/' . $filename;
+            
+    //         $post->image = $imageUrl;
+    //     }
+
+    //     // Si se envía una URL de imagen directamente
+    //     if ($request->has('image') && is_string($request->image) && !$request->hasFile('image')) {
+    //         $post->image = $request->image;
+    //     }
+
+    //     // Actualizar campos
+    //     $post->update($request->only([
+    //         'title',
+    //         'content',
+    //         'category'
+    //     ]));
+
+    //     return response()->json([
+    //         'message' => 'Post actualizado correctamente',
+    //         'data'    => $post->load([
+    //             'user',
+    //             'postable',
+    //             'comments.user'
+    //         ])
+    //     ], 200);
+    // }
+
     public function update(Request $request, $id)
-    {
-        $post = Post::findOrFail($id);
+{
+    $post = Post::findOrFail($id);
 
-        // Verificar permisos
-        if ($post->user_id !== Auth::id() && !Auth::user()->hasRole('admin')) {
-            return response()->json([
-                'message' => 'No autorizado para editar este post'
-            ], 403);
-        }
+    $user = Auth::user();
+    $isOwner = $post->user_id === $user->id;
+    $isAdmin = $user->hasRole('admin');
+    $isProfileOwner = false;
 
-        $request->validate([
-            'title'    => 'sometimes|required|string|max:255',
-            'content'  => 'sometimes|required|string',
-            'image'    => 'nullable|image|mimes:jpg,jpeg,png,webp|max:4096',
-            'category' => 'nullable|string|max:100',
-        ]);
-
-        // Actualizar imagen si se envía una nueva
-        if ($request->hasFile('image')) {
-            // Eliminar imagen anterior si existe
-            if ($post->image) {
-                $this->deleteImageFromProduction($post->image);
-            }
-
-            $file = $request->file('image');
-            $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
-            $destinationPath = '/home1/icjmeomy/apiapk.tudealer.app/public/imagenes_app/posts';
-            
-            if (!file_exists($destinationPath)) {
-                mkdir($destinationPath, 0755, true);
-            }
-            
-            $file->move($destinationPath, $filename);
-            $imageUrl = 'https://apiapk.tudealer.app/imagenes_app/posts/' . $filename;
-            
-            $post->image = $imageUrl;
-        }
-
-        // Si se envía una URL de imagen directamente
-        if ($request->has('image') && is_string($request->image) && !$request->hasFile('image')) {
-            $post->image = $request->image;
-        }
-
-        // Actualizar campos
-        $post->update($request->only([
-            'title',
-            'content',
-            'category'
-        ]));
-
-        return response()->json([
-            'message' => 'Post actualizado correctamente',
-            'data'    => $post->load([
-                'user',
-                'postable',
-                'comments.user'
-            ])
-        ], 200);
+    if ($post->postable && isset($post->postable->user_id)) {
+        $isProfileOwner = $post->postable->user_id === $user->id;
     }
+
+    if (!$isOwner && !$isAdmin && !$isProfileOwner) {
+        return response()->json([
+            'message' => 'No autorizado para editar este post'
+        ], 403);
+    }
+
+    $request->validate([
+        'title'    => 'sometimes|required|string|max:255',
+        'content'  => 'sometimes|required|string',
+        'image'    => 'nullable|image|mimes:jpg,jpeg,png,webp|max:4096',
+        'category' => 'nullable|string|max:100',
+    ]);
+
+    // Actualizar imagen si se envía una nueva
+    if ($request->hasFile('image')) {
+        // Eliminar imagen anterior si existe
+        if ($post->image) {
+            $this->deleteImageFromProduction($post->image);
+        }
+
+        $file = $request->file('image');
+        $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+        $destinationPath = '/home1/icjmeomy/apiapk.tudealer.app/public/imagenes_app/posts';
+        
+        if (!file_exists($destinationPath)) {
+            mkdir($destinationPath, 0755, true);
+        }
+        
+        $file->move($destinationPath, $filename);
+        $imageUrl = 'https://apiapk.tudealer.app/imagenes_app/posts/' . $filename;
+        
+        $post->image = $imageUrl;
+    }
+
+    // Si se envía una URL de imagen directamente
+    if ($request->has('image') && is_string($request->image) && !$request->hasFile('image')) {
+        $post->image = $request->image;
+    }
+
+    // Actualizar campos
+    $post->update($request->only([
+        'title',
+        'content',
+        'category'
+    ]));
+
+    return response()->json([
+        'message' => 'Post actualizado correctamente',
+        'data'    => $post->load([
+            'user',
+            'postable',
+            'comments.user'
+        ])
+    ], 200);
+}
 
     /**
      * DELETE /api/posts/{id}
      * Eliminar post
      */
-    public function destroy($id)
-    {
-        $post = Post::findOrFail($id);
+public function destroy($id)
+{
+    $post = Post::findOrFail($id);
 
-        if ($post->user_id !== Auth::id() && !Auth::user()->hasRole('admin')) {
-            return response()->json([
-                'message' => 'No autorizado'
-            ], 403);
-        }
+    $user = Auth::user();
+    $isOwner = $post->user_id === $user->id;
+    $isAdmin = $user->hasRole('admin');
+    $isProfileOwner = false;
 
-        // 🔥 Eliminar imagen usando el trait
-        $this->deleteImageFromProduction($post->image);
-
-        // Eliminar comentarios y likes asociados
-        $post->comments()->delete();
-        $post->likes()->delete();
-        $post->delete();
-
-        return response()->json([
-            'message' => 'Post eliminado correctamente'
-        ], 200);
+    // Verificar si el usuario es dueño del perfil asociado
+    if ($post->postable && isset($post->postable->user_id)) {
+        $isProfileOwner = $post->postable->user_id === $user->id;
     }
 
+    if (!$isOwner && !$isAdmin && !$isProfileOwner) {
+        return response()->json([
+            'message' => 'No autorizado para eliminar este post'
+        ], 403);
+    }
+
+    // Eliminar imagen y el post
+    $this->deleteImageFromProduction($post->image);
+    $post->comments()->delete();
+    $post->likes()->delete();
+    $post->delete();
+
+    return response()->json([
+        'message' => 'Post eliminado correctamente'
+    ], 200);
+}
     /**
      * GET /api/posts/my
      * Mis posts

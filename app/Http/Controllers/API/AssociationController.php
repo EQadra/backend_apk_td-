@@ -110,7 +110,7 @@ class AssociationController extends Controller
         ]);
 
         return response()->json($association, 201);
-    }
+    }    
 
     /**
      * VER
