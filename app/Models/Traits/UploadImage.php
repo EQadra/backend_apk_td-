@@ -1,14 +1,16 @@
 <?php
+
 namespace App\Models\Traits;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Exception;
 
 trait UploadImage
 {
     /**
-     * Subir imagen a la carpeta de producción
+     * Subir imagen usando Storage de Laravel
      * 
      * @param Request $request
      * @param mixed $model
@@ -27,31 +29,36 @@ trait UploadImage
 
             $file = $request->file($fieldName);
             
-            // Validar que sea una imagen
             if (!$file->isValid() || !in_array($file->getMimeType(), ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'])) {
                 return response()->json([
                     'error' => 'Formato de imagen no válido. Use JPG, PNG o WEBP'
                 ], 422);
             }
 
-            // Generar nombre único
             $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
             
-            // Ruta de destino
-            $destinationPath = '/home1/icjmeomy/apiapk.tudealer.app/public/imagenes_app/' . $folder;
+            // ✅ GUARDAR EN STORAGE
+            $path = $file->storeAs('imagenes_app/' . $folder, $filename, 'public');
             
-            // Crear carpeta si no existe
-            if (!file_exists($destinationPath)) {
-                mkdir($destinationPath, 0755, true);
+            if (!$path) {
+                return response()->json([
+                    'error' => 'Error al guardar la imagen en el servidor'
+                ], 500);
+            }
+
+            // ✅ URL CON STORAGE
+            $isDevelopment = env('APP_ENV') === 'local' || env('APP_ENV') === 'development';
+            
+            if ($isDevelopment) {
+                $imageUrl = 'http://192.168.203.82:8000/storage/' . $path;
+            } else {
+                $imageUrl = 'https://apiapk.tudealer.app/storage/' . $path;
             }
             
-            // Mover archivo
-            $file->move($destinationPath, $filename);
+            if ($model->$fieldName) {
+                $this->deleteImageFromProduction($model->$fieldName);
+            }
             
-            // URL pública
-            $imageUrl = 'https://apiapk.tudealer.app/imagenes_app/' . $folder . '/' . $filename;
-            
-            // Actualizar modelo
             $model->update([$fieldName => $imageUrl]);
             
             return response()->json([
@@ -59,7 +66,9 @@ trait UploadImage
                 'message' => 'Imagen subida correctamente',
                 'data' => [
                     'image_url' => $imageUrl,
-                    'filename' => $filename
+                    'image' => $imageUrl,
+                    'filename' => $filename,
+                    'path' => $path
                 ]
             ], 200);
             
@@ -73,20 +82,22 @@ trait UploadImage
     }
 
     /**
-     * Eliminar imagen del servidor
+     * Eliminar imagen del servidor usando Storage
      */
     protected function deleteImageFromProduction(?string $imageUrl)
     {
         if (!$imageUrl) return;
         
         try {
-            // Extraer la ruta relativa desde la URL
-            $path = str_replace('https://apiapk.tudealer.app/', '', $imageUrl);
-            $fullPath = '/home1/icjmeomy/apiapk.tudealer.app/public/' . $path;
+            $cleanUrl = explode('?', $imageUrl)[0];
             
-            if (file_exists($fullPath)) {
-                unlink($fullPath);
-                Log::info('Imagen eliminada: ' . $fullPath);
+            if (strpos($cleanUrl, '/storage/') !== false) {
+                $path = substr($cleanUrl, strpos($cleanUrl, '/storage/') + 9);
+                
+                if (Storage::disk('public')->exists($path)) {
+                    Storage::disk('public')->delete($path);
+                    Log::info('Imagen eliminada: ' . $path);
+                }
             }
         } catch (Exception $e) {
             Log::error('Error al eliminar imagen: ' . $e->getMessage());

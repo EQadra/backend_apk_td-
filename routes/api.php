@@ -157,9 +157,17 @@ Route::middleware('auth:api')->group(function () {
     | ACTUALIZACIÓN DE IMÁGENES - 🔥 RUTAS CORRECTAS
     |--------------------------------------------------------------------------
     */
-    Route::post('/doctor/image', [DoctorController::class, 'updateImage']);
+    // ✅ DOCTOR - CORREGIDO: ahora usa la ruta correcta con 'doctors'
+    Route::post('/doctors/update-image', [DoctorController::class, 'updateImage']);
+    Route::get('/doctors/image', [DoctorController::class, 'getImage']);
+    
+    // ✅ LAWYER
     Route::post('/lawyer/image', [LawyerController::class, 'updateImage']);
+    
+    // ✅ ASSOCIATION
     Route::post('/association/image', [AssociationController::class, 'updateImage']);
+    
+    // ✅ SHOP
     Route::post('/shop/image', [ShopController::class, 'updateImage']);
 
     /*

@@ -79,23 +79,22 @@ class AuthController extends Controller
             'name'     => 'required|string|max:255',
             'email'    => 'required|email|unique:users,email',
             'password' => 'required|confirmed|min:8',
-            'phone'    => 'nullable|string|max:20', // ✅ Teléfono para usuario
-            'dni'      => 'nullable|string|max:20', // ✅ DNI opcional
+            'phone'    => 'nullable|string|max:20',
+            'dni'      => 'nullable|string|max:20',
         ]);
 
         $userData = [
             'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
-            'phone' => $request->phone,      // ✅ Guardar teléfono
-            'dni' => $request->dni,          // ✅ Guardar DNI
+            'phone' => $request->phone,
+            'dni' => $request->dni,
         ];
 
         $user = User::create($userData);
 
         // 🔍 DETECCIÓN POR CAMPO
         if ($request->licencia) {
-            // ABOGADO: se requiere first_name y last_name
             Lawyer::create([
                 'user_id'     => $user->id,
                 'first_name'  => $request->first_name ?? $request->name,
@@ -107,7 +106,6 @@ class AuthController extends Controller
             $user->assignRole('lawyer');
         } 
         elseif ($request->codigoDoctor) {
-            // DOCTOR: el campo en BD es graduation_code
             Doctor::create([
                 'user_id'         => $user->id,
                 'first_name'      => $request->first_name,
@@ -141,7 +139,6 @@ class AuthController extends Controller
                 $user->assignRole('shop');
             }
         } else {
-            // ✅ Usuario normal
             $user->assignRole('user');
         }
 
@@ -166,49 +163,48 @@ class AuthController extends Controller
      | ME
      ======================= */
 
-public function me()
-{
-    $user = Auth::guard('api')->user();
+    public function me()
+    {
+        $user = Auth::guard('api')->user();
 
-    if (!$user) {
-        return response()->json([
-            'message' => 'Usuario no autenticado'
-        ], 401);
+        if (!$user) {
+            return response()->json([
+                'message' => 'Usuario no autenticado'
+            ], 401);
+        }
+
+        // Asegurar que todos los campos estén incluidos
+        $userData = $user->toArray();
+        
+        $userData['phone'] = $user->phone ?? '';
+        $userData['dni'] = $user->dni ?? '';
+        $userData['address'] = $user->address ?? '';
+        $userData['city'] = $user->city ?? '';
+        $userData['avatar_url'] = $user->avatar_url;
+
+        // Cargar perfiles del usuario
+        $user->load(['doctor', 'lawyer', 'association', 'shop']);
+        
+        if ($user->doctor) {
+            $userData['profile_type'] = 'doctor';
+            $userData['profile'] = $user->doctor;
+        } elseif ($user->lawyer) {
+            $userData['profile_type'] = 'lawyer';
+            $userData['profile'] = $user->lawyer;
+        } elseif ($user->association) {
+            $userData['profile_type'] = 'association';
+            $userData['profile'] = $user->association;
+        } elseif ($user->shop) {
+            $userData['profile_type'] = 'shop';
+            $userData['profile'] = $user->shop;
+        } else {
+            $userData['profile_type'] = 'user';
+            $userData['profile'] = null;
+        }
+
+        return response()->json($userData);
     }
 
-    // Asegurar que todos los campos estén incluidos
-    $userData = $user->toArray();
-    
-    // ✅ Asegurar que estos campos existan en la respuesta
-    $userData['phone'] = $user->phone ?? '';
-    $userData['dni'] = $user->dni ?? '';
-    $userData['address'] = $user->address ?? '';
-    $userData['city'] = $user->city ?? '';
-    $userData['avatar_url'] = $user->avatar_url;
-
-    // Cargar perfiles del usuario
-    $user->load(['doctor', 'lawyer', 'association', 'shop']);
-    
-    // Si tiene perfil, agregar sus datos
-    if ($user->doctor) {
-        $userData['profile_type'] = 'doctor';
-        $userData['profile'] = $user->doctor;
-    } elseif ($user->lawyer) {
-        $userData['profile_type'] = 'lawyer';
-        $userData['profile'] = $user->lawyer;
-    } elseif ($user->association) {
-        $userData['profile_type'] = 'association';
-        $userData['profile'] = $user->association;
-    } elseif ($user->shop) {
-        $userData['profile_type'] = 'shop';
-        $userData['profile'] = $user->shop;
-    } else {
-        $userData['profile_type'] = 'user';
-        $userData['profile'] = null;
-    }
-
-    return response()->json($userData);
-}
     /* =======================
      | LOGOUT
      ======================= */
@@ -227,7 +223,6 @@ public function me()
         $user = Auth::guard('api')->user();
         $user->load(['doctor', 'lawyer', 'association', 'shop']);
 
-        // Formatear la respuesta del usuario con todos los datos
         $formattedUser = $this->formatUserResponse($user);
 
         return response()->json([
@@ -339,10 +334,8 @@ public function me()
             'city'
         ]));
 
-        // Recargar usuario con perfiles
         $user->load(['doctor', 'lawyer', 'association', 'shop']);
 
-        // Formatear la respuesta del usuario con todos los datos
         $formattedUser = $this->formatUserResponse($user);
 
         return response()->json([
@@ -353,7 +346,7 @@ public function me()
     }
 
     /* =======================
-     | ✅ ACTUALIZAR AVATAR
+     | ✅ ACTUALIZAR AVATAR - CORREGIDO
      ======================= */
     
     public function updateAvatar(Request $request)
@@ -373,7 +366,7 @@ public function me()
         try {
             // Eliminar avatar anterior si existe
             if ($user->avatar) {
-                $oldPath = str_replace('https://apiapk.tudealer.app/', '', $user->avatar);
+                $oldPath = str_replace(['https://apiapk.tudealer.app/', 'http://192.168.203.82:8000/'], '', $user->avatar);
                 $fullPath = '/home1/icjmeomy/apiapk.tudealer.app/public/' . $oldPath;
                 if (file_exists($fullPath)) {
                     unlink($fullPath);
@@ -389,14 +382,20 @@ public function me()
             }
             
             $file->move($destinationPath, $filename);
-            $avatarUrl = 'https://apiapk.tudealer.app/imagenes_app/avatars/' . $filename;
+            
+            // ✅ DETECTAR ENTORNO PARA LA URL CORRECTA
+            $isDevelopment = env('APP_ENV') === 'local' || env('APP_ENV') === 'development';
+            
+            if ($isDevelopment) {
+                $avatarUrl = 'http://192.168.203.82:8000/imagenes_app/avatars/' . $filename;
+            } else {
+                $avatarUrl = 'https://apiapk.tudealer.app/imagenes_app/avatars/' . $filename;
+            }
             
             $user->update(['avatar' => $avatarUrl]);
 
-            // Recargar usuario con perfiles
             $user->load(['doctor', 'lawyer', 'association', 'shop']);
 
-            // Formatear la respuesta del usuario con todos los datos
             $formattedUser = $this->formatUserResponse($user);
 
             return response()->json([
@@ -419,7 +418,7 @@ public function me()
     }
 
     /* =======================
-     | ✅ ELIMINAR AVATAR
+     | ✅ ELIMINAR AVATAR - CORREGIDO
      ======================= */
     
     public function deleteAvatar(Request $request)
@@ -433,9 +432,8 @@ public function me()
         }
 
         try {
-            // Eliminar avatar anterior si existe
             if ($user->avatar) {
-                $oldPath = str_replace('https://apiapk.tudealer.app/', '', $user->avatar);
+                $oldPath = str_replace(['https://apiapk.tudealer.app/', 'http://192.168.203.82:8000/'], '', $user->avatar);
                 $fullPath = '/home1/icjmeomy/apiapk.tudealer.app/public/' . $oldPath;
                 if (file_exists($fullPath)) {
                     unlink($fullPath);
@@ -444,10 +442,8 @@ public function me()
 
             $user->update(['avatar' => null]);
 
-            // Recargar usuario con perfiles
             $user->load(['doctor', 'lawyer', 'association', 'shop']);
 
-            // Formatear la respuesta del usuario con todos los datos
             $formattedUser = $this->formatUserResponse($user);
 
             return response()->json([
@@ -470,25 +466,19 @@ public function me()
      | 🔥 FORMATO DE RESPUESTA DEL USUARIO
      ======================= */
     
-    /**
-     * Formatea la respuesta del usuario incluyendo todos los campos de los perfiles
-     */
     private function formatUserResponse($user)
     {
         $userData = $user->toArray();
 
-        // Añadir campos específicos según el perfil
         if ($user->doctor) {
             $userData['profile_type'] = 'doctor';
             $userData['profile'] = $user->doctor->toArray();
-            // Añadir teléfonos formateados si existen
             $userData['profile']['formatted_phone'] = $user->doctor->formatted_phone;
             $userData['profile']['formatted_emergency_phone'] = $user->doctor->formatted_emergency_phone;
             $userData['profile']['formatted_clinic_phone'] = $user->doctor->formatted_clinic_phone;
         } elseif ($user->lawyer) {
             $userData['profile_type'] = 'lawyer';
             $userData['profile'] = $user->lawyer->toArray();
-            // Añadir teléfonos formateados si existen
             $userData['profile']['formatted_phone'] = $user->lawyer->formatted_phone;
             $userData['profile']['formatted_office_phone'] = $user->lawyer->formatted_office_phone;
         } elseif ($user->association) {
@@ -513,7 +503,6 @@ public function me()
         $user = Auth::guard('api')->user();
         $user->load(['doctor', 'lawyer', 'association', 'shop']);
 
-        // Formatear la respuesta del usuario con todos los datos
         $formattedUser = $this->formatUserResponse($user);
 
         return response()->json([

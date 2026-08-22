@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Traits\BelongsToUser;
 use App\Models\Traits\HasServices;
+use Illuminate\Support\Facades\Config;
 
 class Doctor extends Model
 {
@@ -25,7 +26,6 @@ class Doctor extends Model
         'rating',
         'image',
         'schedule',
-        // Nuevos campos de teléfono
         'phone',
         'emergency_phone',
         'clinic_phone',
@@ -86,7 +86,20 @@ class Doctor extends Model
             return null;
         }
 
-        return asset('storage/' . $this->image);
+        // ✅ LA IMAGEN YA ES UNA URL COMPLETA (guardada por el trait UploadImage)
+        // Solo verificar si es una URL válida, si no, construirla
+        if (filter_var($this->image, FILTER_VALIDATE_URL)) {
+            return $this->image;
+        }
+
+        // Si por algún motivo no es URL completa, construirla
+        $isDevelopment = Config::get('app.env') === 'local' || Config::get('app.env') === 'development';
+        
+        if ($isDevelopment) {
+            return 'http://192.168.203.82:8000/imagenes_app/doctors/' . $this->image;
+        }
+        
+        return 'https://apiapk.tudealer.app/imagenes_app/doctors/' . $this->image;
     }
 
     // Formatear teléfonos
