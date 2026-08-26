@@ -116,207 +116,318 @@ class NewsController extends Controller
      * La noticia puede estar asociada opcionalmente
      * a un Doctor, Lawyer, Shop o Association.
      */
-    public function store(Request $request)
-    {
-        $user = Auth::user();
+   public function store(Request $request)
+{
+    $user = Auth::user();
 
-        if (!$user) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Usuario no autenticado',
-            ], 401);
-        }
-
-        $validator = Validator::make(
-            $request->all(),
-            [
-                'titulo' => [
-                    'required',
-                    'string',
-                    'max:191',
-                ],
-                'descripcion' => [
-                    'nullable',
-                    'string',
-                ],
-                'url' => [
-                    'nullable',
-                    'url',
-                    'max:191',
-                ],
-                'image' => [
-                    'nullable',
-                    'file',
-                    'image',
-                    'mimes:jpeg,png,jpg,gif,svg,webp',
-                    'max:5120',
-                ],
-                'fecha_publicacion' => [
-                    'nullable',
-                    'date',
-                ],
-                'newable_type' => [
-                    'nullable',
-                    'string',
-                    'in:' . implode(
-                        ',',
-                        $this->allowedNewableTypes()
-                    ),
-                ],
-                'newable_id' => [
-                    'nullable',
-                    'integer',
-                    'min:1',
-                ],
-            ],
-            [
-                'newable_type.in' =>
-                    'El tipo de perfil no es válido.',
-                'newable_id.integer' =>
-                    'El ID del perfil debe ser un número entero.',
-                'newable_id.min' =>
-                    'El ID del perfil no es válido.',
-                'image.image' => 'El archivo debe ser una imagen válida.',
-                'image.max' => 'La imagen no debe pesar más de 5MB.',
-                'image.mimes' => 'La imagen debe ser de tipo: jpeg, png, jpg, gif, svg o webp.',
-            ]
-        );
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
-        /*
-        |--------------------------------------------------------------------------
-        | Validar relación newable
-        |--------------------------------------------------------------------------
-        */
-
-        $newableType = $request->input('newable_type');
-        $newableId = $request->input('newable_id');
-
-        // Si viene uno, deben venir ambos.
-        if (
-            ($newableType && !$newableId) ||
-            (!$newableType && $newableId)
-        ) {
-            return response()->json([
-                'success' => false,
-                'message' =>
-                    'newable_type y newable_id deben enviarse juntos.',
-            ], 422);
-        }
-
-        $newable = null;
-
-        if ($newableType && $newableId) {
-            $newable = $this->getNewableModel(
-                $newableType,
-                $newableId
-            );
-
-            if (!$newable) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Perfil no encontrado.',
-                ], 404);
-            }
-
-            /*
-            |--------------------------------------------------------------------------
-            | Verificar propietario del perfil
-            |--------------------------------------------------------------------------
-            */
-
-            $isAdmin = $user->hasRole('admin');
-
-            if (
-                !$isAdmin &&
-                isset($newable->user_id) &&
-                (int) $newable->user_id !== (int) $user->id
-            ) {
-                return response()->json([
-                    'success' => false,
-                    'message' =>
-                        'No tienes permiso para crear noticias en este perfil.',
-                ], 403);
-            }
-        }
-
-        /*
-        |--------------------------------------------------------------------------
-        | Datos de la noticia
-        |--------------------------------------------------------------------------
-        */
-
-        $data = [
-            'user_id' => $user->id,
-            'titulo' => $request->input('titulo'),
-            'descripcion' => $request->input('descripcion'),
-            'url' => $request->input('url'),
-            'fecha_publicacion' =>
-                $request->input('fecha_publicacion') ?? now(),
-            'newable_type' => $newableType,
-            'newable_id' => $newableId,
-        ];
-
-        /*
-        |--------------------------------------------------------------------------
-        | Imagen
-        |--------------------------------------------------------------------------
-        */
-
-        if ($request->hasFile('image')) {
-            // Crear una instancia temporal para usar el trait
-            $tempModel = new News();
-            $tempModel->fill($data);
-            
-            // Usar el método del trait para subir la imagen
-            $result = $this->uploadImageToProduction(
-                $request, 
-                $tempModel, 
-                'news',
-                'image'
-            );
-            
-            // Si el resultado es una respuesta JSON con error
-            if ($result instanceof \Illuminate\Http\JsonResponse) {
-                $responseData = $result->getData();
-                if (isset($responseData->error) || !isset($responseData->success)) {
-                    return $result;
-                }
-            }
-            
-            // Actualizar el data con la URL de la imagen
-            $data['image'] = $tempModel->image;
-        } elseif ($request->input('image')) {
-            // Si es una URL string
-            $data['image'] = $request->input('image');
-        }
-
-        /*
-        |--------------------------------------------------------------------------
-        | Crear noticia
-        |--------------------------------------------------------------------------
-        */
-
-        $news = News::create($data);
-
-        $news->load([
-            'user',
-            'newable',
-            'comments.user',
-        ]);
-
+    if (!$user) {
         return response()->json([
-            'success' => true,
-            'message' => 'Noticia creada exitosamente.',
-            'data' => $news,
-        ], 201);
+            'success' => false,
+            'message' => 'Usuario no autenticado',
+        ], 401);
     }
+
+    $validator = Validator::make(
+        $request->all(),
+        [
+            'titulo' => 'required|string|max:191',
+            'descripcion' => 'nullable|string',
+            'url' => 'nullable|url|max:191',
+            'image' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg,webp|max:5120',
+            'fecha_publicacion' => 'nullable|date',
+            'newable_type' => 'nullable|string|in:' . implode(',', $this->allowedNewableTypes()),
+            'newable_id' => 'nullable|integer|min:1',
+        ],
+        [
+            'image.image' => 'El archivo debe ser una imagen válida.',
+            'image.max' => 'La imagen no debe pesar más de 5MB.',
+            'image.mimes' => 'La imagen debe ser de tipo: jpeg, png, jpg, gif, svg o webp.',
+        ]
+    );
+
+    if ($validator->fails()) {
+        return response()->json([
+            'success' => false,
+            'errors' => $validator->errors(),
+        ], 422);
+    }
+
+    $newableType = $request->input('newable_type');
+    $newableId = $request->input('newable_id');
+
+    if (($newableType && !$newableId) || (!$newableType && $newableId)) {
+        return response()->json([
+            'success' => false,
+            'message' => 'newable_type y newable_id deben enviarse juntos.',
+        ], 422);
+    }
+
+    $newable = null;
+
+    if ($newableType && $newableId) {
+        $newable = $this->getNewableModel($newableType, $newableId);
+
+        if (!$newable) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Perfil no encontrado.',
+            ], 404);
+        }
+
+        $isAdmin = $user->hasRole('admin');
+
+        if (!$isAdmin && isset($newable->user_id) && (int) $newable->user_id !== (int) $user->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No tienes permiso para crear noticias en este perfil.',
+            ], 403);
+        }
+    }
+
+    $data = [
+        'user_id' => $user->id,
+        'titulo' => $request->input('titulo'),
+        'descripcion' => $request->input('descripcion'),
+        'url' => $request->input('url'),
+        'fecha_publicacion' => $request->input('fecha_publicacion') ?? now(),
+        'newable_type' => $newableType,
+        'newable_id' => $newableId,
+    ];
+
+    // ✅ MANEJAR IMAGEN
+    if ($request->hasFile('image')) {
+        // La imagen viene como archivo real
+        $file = $request->file('image');
+        $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+        $path = $file->storeAs('imagenes_app/news', $filename, 'public');
+
+        $isDevelopment = env('APP_ENV') === 'local' || env('APP_ENV') === 'development';
+        $imageUrl = $isDevelopment
+            ? 'http://192.168.203.82:8000/storage/' . $path
+            : 'https://apiapk.tudealer.app/storage/' . $path;
+
+        $data['image'] = $imageUrl;
+    } elseif ($request->input('image')) {
+        // Si es una URL string (por si acaso)
+        $data['image'] = $request->input('image');
+    } else {
+        // Sin imagen
+        $data['image'] = null;
+    }
+
+    $news = News::create($data);
+
+    $news->load(['user', 'newable', 'comments.user']);
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Noticia creada exitosamente.',
+        'data' => $news,
+    ], 201);
+}
+   
+   
+    // public function store(Request $request)
+    // {
+    //     $user = Auth::user();
+
+    //     if (!$user) {
+    //         return response()->json([
+    //             'success' => false,
+    //             'message' => 'Usuario no autenticado',
+    //         ], 401);
+    //     }
+
+    //     $validator = Validator::make(
+    //         $request->all(),
+    //         [
+    //             'titulo' => [
+    //                 'required',
+    //                 'string',
+    //                 'max:191',
+    //             ],
+    //             'descripcion' => [
+    //                 'nullable',
+    //                 'string',
+    //             ],
+    //             'url' => [
+    //                 'nullable',
+    //                 'url',
+    //                 'max:191',
+    //             ],
+    //             'image' => [
+    //                 'nullable',
+    //                 'file',
+    //                 'image',
+    //                 'mimes:jpeg,png,jpg,gif,svg,webp',
+    //                 'max:5120',
+    //             ],
+    //             'fecha_publicacion' => [
+    //                 'nullable',
+    //                 'date',
+    //             ],
+    //             'newable_type' => [
+    //                 'nullable',
+    //                 'string',
+    //                 'in:' . implode(
+    //                     ',',
+    //                     $this->allowedNewableTypes()
+    //                 ),
+    //             ],
+    //             'newable_id' => [
+    //                 'nullable',
+    //                 'integer',
+    //                 'min:1',
+    //             ],
+    //         ],
+    //         [
+    //             'newable_type.in' =>
+    //                 'El tipo de perfil no es válido.',
+    //             'newable_id.integer' =>
+    //                 'El ID del perfil debe ser un número entero.',
+    //             'newable_id.min' =>
+    //                 'El ID del perfil no es válido.',
+    //             'image.image' => 'El archivo debe ser una imagen válida.',
+    //             'image.max' => 'La imagen no debe pesar más de 5MB.',
+    //             'image.mimes' => 'La imagen debe ser de tipo: jpeg, png, jpg, gif, svg o webp.',
+    //         ]
+    //     );
+
+    //     if ($validator->fails()) {
+    //         return response()->json([
+    //             'success' => false,
+    //             'errors' => $validator->errors(),
+    //         ], 422);
+    //     }
+
+    //     /*
+    //     |--------------------------------------------------------------------------
+    //     | Validar relación newable
+    //     |--------------------------------------------------------------------------
+    //     */
+
+    //     $newableType = $request->input('newable_type');
+    //     $newableId = $request->input('newable_id');
+
+    //     // Si viene uno, deben venir ambos.
+    //     if (
+    //         ($newableType && !$newableId) ||
+    //         (!$newableType && $newableId)
+    //     ) {
+    //         return response()->json([
+    //             'success' => false,
+    //             'message' =>
+    //                 'newable_type y newable_id deben enviarse juntos.',
+    //         ], 422);
+    //     }
+
+    //     $newable = null;
+
+    //     if ($newableType && $newableId) {
+    //         $newable = $this->getNewableModel(
+    //             $newableType,
+    //             $newableId
+    //         );
+
+    //         if (!$newable) {
+    //             return response()->json([
+    //                 'success' => false,
+    //                 'message' => 'Perfil no encontrado.',
+    //             ], 404);
+    //         }
+
+    //         /*
+    //         |--------------------------------------------------------------------------
+    //         | Verificar propietario del perfil
+    //         |--------------------------------------------------------------------------
+    //         */
+
+    //         $isAdmin = $user->hasRole('admin');
+
+    //         if (
+    //             !$isAdmin &&
+    //             isset($newable->user_id) &&
+    //             (int) $newable->user_id !== (int) $user->id
+    //         ) {
+    //             return response()->json([
+    //                 'success' => false,
+    //                 'message' =>
+    //                     'No tienes permiso para crear noticias en este perfil.',
+    //             ], 403);
+    //         }
+    //     }
+
+    //     /*
+    //     |--------------------------------------------------------------------------
+    //     | Datos de la noticia
+    //     |--------------------------------------------------------------------------
+    //     */
+
+    //     $data = [
+    //         'user_id' => $user->id,
+    //         'titulo' => $request->input('titulo'),
+    //         'descripcion' => $request->input('descripcion'),
+    //         'url' => $request->input('url'),
+    //         'fecha_publicacion' =>
+    //             $request->input('fecha_publicacion') ?? now(),
+    //         'newable_type' => $newableType,
+    //         'newable_id' => $newableId,
+    //     ];
+
+    //     /*
+    //     |--------------------------------------------------------------------------
+    //     | Imagen
+    //     |--------------------------------------------------------------------------
+    //     */
+
+    //     if ($request->hasFile('image')) {
+    //         // Crear una instancia temporal para usar el trait
+    //         $tempModel = new News();
+    //         $tempModel->fill($data);
+            
+    //         // Usar el método del trait para subir la imagen
+    //         $result = $this->uploadImageToProduction(
+    //             $request, 
+    //             $tempModel, 
+    //             'news',
+    //             'image'
+    //         );
+            
+    //         // Si el resultado es una respuesta JSON con error
+    //         if ($result instanceof \Illuminate\Http\JsonResponse) {
+    //             $responseData = $result->getData();
+    //             if (isset($responseData->error) || !isset($responseData->success)) {
+    //                 return $result;
+    //             }
+    //         }
+            
+    //         // Actualizar el data con la URL de la imagen
+    //         $data['image'] = $tempModel->image;
+    //     } elseif ($request->input('image')) {
+    //         // Si es una URL string
+    //         $data['image'] = $request->input('image');
+    //     }
+
+    //     /*
+    //     |--------------------------------------------------------------------------
+    //     | Crear noticia
+    //     |--------------------------------------------------------------------------
+    //     */
+
+    //     $news = News::create($data);
+
+    //     $news->load([
+    //         'user',
+    //         'newable',
+    //         'comments.user',
+    //     ]);
+
+    //     return response()->json([
+    //         'success' => true,
+    //         'message' => 'Noticia creada exitosamente.',
+    //         'data' => $news,
+    //     ], 201);
+    // }
 
     /**
      * Mostrar una noticia.

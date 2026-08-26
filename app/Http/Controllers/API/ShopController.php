@@ -227,7 +227,7 @@ class ShopController extends Controller
             'posts.comments'
         ])
         ->latest()
-        ->take(5)
+        ->take(10)
         ->get();
     }
 

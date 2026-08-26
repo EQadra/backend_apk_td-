@@ -8,6 +8,7 @@ use App\Models\Traits\UploadImage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator; // ✅ AGREGADO
 use Exception;
 
 class AssociationController extends Controller
@@ -65,15 +66,22 @@ class AssociationController extends Controller
      */
     public function store(Request $request)
     {
-        $request->validate([
+        $validator = Validator::make($request->all(), [
             'name'        => 'required|string|max:255',
             'description' => 'nullable|string',
             'city'        => 'nullable|string|max:100',
             'address'     => 'nullable|string|max:255',
             'phone'       => 'nullable|string|max:20',
-            'image'       => 'nullable|image|mimes:jpg,jpeg,png,webp|max:4096',
+            'image'       => 'nullable',
             'website'     => 'nullable|string|max:255',
         ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'errors' => $validator->errors()
+            ], 422);
+        }
 
         $exists = Association::where('user_id', Auth::id())->exists();
 
@@ -85,6 +93,7 @@ class AssociationController extends Controller
 
         $imageUrl = null;
 
+        // ✅ MANEJO DE IMAGEN CORREGIDO
         if ($request->hasFile('image')) {
             $file = $request->file('image');
             $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
@@ -96,6 +105,8 @@ class AssociationController extends Controller
             
             $file->move($destinationPath, $filename);
             $imageUrl = 'https://apiapk.tudealer.app/imagenes_app/associations/' . $filename;
+        } elseif ($request->has('image') && is_string($request->image)) {
+            $imageUrl = $request->image;
         }
 
         $association = Association::create([
@@ -133,7 +144,7 @@ class AssociationController extends Controller
     }
 
     /**
-     * ACTUALIZAR
+     * ACTUALIZAR - ✅ CORREGIDO
      */
     public function update(Request $request, $id)
     {
@@ -143,19 +154,30 @@ class AssociationController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        $request->validate([
+        // ✅ VALIDACIÓN CORREGIDA
+        $validator = Validator::make($request->all(), [
             'name'        => 'sometimes|string|max:255',
             'description' => 'nullable|string',
             'city'        => 'nullable|string|max:100',
             'address'     => 'nullable|string|max:255',
             'phone'       => 'nullable|string|max:20',
-            'image'       => 'nullable|image|mimes:jpg,jpeg,png,webp|max:4096',
+            'image'       => 'nullable', // ✅ Acepta archivo o URL
             'website'     => 'nullable|string|max:255',
         ]);
 
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        // ✅ MANEJO DE IMAGEN CORREGIDO
         if ($request->hasFile('image')) {
-            // Eliminar imagen anterior
-            $this->deleteImageFromProduction($association->image);
+            // Eliminar imagen anterior si existe
+            if ($association->image) {
+                $this->deleteImageFromProduction($association->image);
+            }
             
             $file = $request->file('image');
             $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
@@ -169,12 +191,12 @@ class AssociationController extends Controller
             $imageUrl = 'https://apiapk.tudealer.app/imagenes_app/associations/' . $filename;
             
             $association->image = $imageUrl;
-        }
-
-        if ($request->has('image') && is_string($request->image)) {
+        } elseif ($request->has('image') && is_string($request->image) && !empty($request->image)) {
+            // ✅ Si es URL string, guardar directamente
             $association->image = $request->image;
         }
 
+        // ✅ Actualizar campos normales
         $association->update($request->only([
             'name',
             'description',
@@ -186,7 +208,12 @@ class AssociationController extends Controller
 
         return response()->json([
             'message' => 'Association updated',
-            'data' => $association
+            'data' => $association->fresh()->load([
+                'user',
+                'feedbacks.user',
+                'posts.comments',
+                'products'
+            ])
         ]);
     }
 
@@ -223,7 +250,7 @@ class AssociationController extends Controller
             'news'
         ])
         ->latest()
-        ->take(5)
+        ->take(10)
         ->get();
     }
 

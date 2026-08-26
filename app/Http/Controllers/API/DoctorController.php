@@ -194,7 +194,7 @@ class DoctorController extends Controller
             'services'
         ])
         ->latest()
-        ->take(3)
+        ->take(10)
         ->get();
     }
 
