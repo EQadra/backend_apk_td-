@@ -39,7 +39,7 @@ class NewsController extends Controller
             'comments.user',
         ])
             ->latest('created_at')
-            ->limit(15)
+            ->limit(10)
             ->get();
 
         return response()->json($news);
@@ -56,7 +56,7 @@ class NewsController extends Controller
             'comments.user',
         ])
             ->latest('created_at')
-            ->take(6)
+            ->take(10)
             ->get();
 
         return response()->json($news);

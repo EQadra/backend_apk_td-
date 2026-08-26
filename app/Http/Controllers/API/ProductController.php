@@ -245,7 +245,7 @@ public function destroy($id)
         $products = Product::with([
             'productable.user',
             'comments.user'
-        ])->latest()->limit(5)->get();
+        ])->latest()->limit(10)->get();
 
         return response()->json($products);
     }

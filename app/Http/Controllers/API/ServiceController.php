@@ -9,10 +9,40 @@ use Illuminate\Support\Facades\Auth;
 
 class ServiceController extends Controller
 {
-    // Listar todos los servicios
+ // Listar solo 6 servicios de personas
     public function index()
     {
-        $services = Service::with(['serviceable', 'comments'])->latest()->get();
+        $services = Service::with(['serviceable', 'comments'])
+            ->whereIn('serviceable_type', [
+                'App\Models\Lawyer',
+                'App\Models\Doctor',
+                'App\Models\Client',
+                // 🔥 Agrega aquí todos los modelos que representan personas
+            ])
+            ->latest()
+            ->limit(6)  // 👈 LIMITAR A 6
+            ->get();
+            
+        return response()->json($services);
+    }
+
+    // 🔥 Home: últimos 5 servicios de personas (si quieres mantener 5)
+    public function latest()
+    {
+        $services = Service::with([
+            'serviceable',
+            'comments'
+        ])
+        ->whereIn('serviceable_type', [
+            'App\Models\Lawyer',
+            'App\Models\Doctor',
+            'App\Models\Client',
+            // 🔥 Agrega aquí todos los modelos que representan personas
+        ])
+        ->latest()
+        ->limit(5)  // 👈 Aquí puedes poner 5 o 6 según prefieras
+        ->get();
+
         return response()->json($services);
     }
 
@@ -99,19 +129,19 @@ class ServiceController extends Controller
         ]);
     }
 
-    // 🔥 Home: últimos 5 servicios
-    public function latest()
-    {
-        $services = Service::with([
-            'serviceable',
-            'comments'
-        ])
-        ->latest()
-        ->limit(5)
-        ->get();
+    // // 🔥 Home: últimos 5 servicios
+    // public function latest()
+    // {
+    //     $services = Service::with([
+    //         'serviceable',
+    //         'comments'
+    //     ])
+    //     ->latest()
+    //     ->limit(5)
+    //     ->get();
 
-        return response()->json($services);
-    }
+    //     return response()->json($services);
+    // }
 
     public function myLatestServices()
     {

@@ -156,7 +156,7 @@ class PostController extends Controller
         ])
         ->withCount('likes as likes_count')
         ->latest()
-        ->take(4)
+        ->take(10)
         ->get();
 
         $user = Auth::user();
