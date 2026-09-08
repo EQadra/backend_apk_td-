@@ -4,11 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Models\Traits\UploadImage; // ✅ IMPORTAMOS EL TRAIT
+use App\Models\Traits\UploadImage;
 
 class Service extends Model
 {
-    use HasFactory, UploadImage; // ✅ AGREGAMOS EL TRAIT
+    use HasFactory, UploadImage;
 
     protected $fillable = [
         'serviceable_id',
@@ -17,8 +17,17 @@ class Service extends Model
         'description',
         'price',
         'duration',
-        'image', // ✅ AGREGAMOS EL CAMPO IMAGE
+        'image',
     ];
+
+    protected $appends = [
+        'image_url',
+        'formatted_price',
+    ];
+
+    // ============================================================
+    // RELACIONES
+    // ============================================================
 
     public function serviceable()
     {
@@ -40,14 +49,47 @@ class Service extends Model
         return $this->morphMany(History::class, 'historyable');
     }
 
-    // ✅ MÉTODOS HELPER PARA IMÁGENES
+    // ============================================================
+    // ACCESSORS
+    // ============================================================
+
     public function getImageUrlAttribute()
     {
-        return $this->image ?? null;
+        return $this->getFullImageUrl($this->image);
     }
 
-    public function hasImage()
+    public function getFormattedPriceAttribute()
+    {
+        return 'S/ ' . number_format($this->price, 2);
+    }
+
+    // ============================================================
+    // MÉTODOS HELPER
+    // ============================================================
+
+    public function hasImage(): bool
     {
         return !is_null($this->image);
+    }
+
+    /**
+     * Subir imagen para este servicio
+     */
+    public function uploadImage(Request $request)
+    {
+        return $this->uploadImageToProduction($request, $this, 'services', 'image');
+    }
+
+    /**
+     * Eliminar imagen de este servicio
+     */
+    public function deleteImage()
+    {
+        if ($this->image) {
+            $this->deleteImageFromProduction($this->image);
+            $this->update(['image' => null]);
+            return true;
+        }
+        return false;
     }
 }

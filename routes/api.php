@@ -27,17 +27,23 @@ use App\Http\Controllers\API\HistoryController;
 |--------------------------------------------------------------------------
 */
 Route::prefix('auth')->group(function () {
+    // ✅ PÚBLICAS
     Route::post('login', [AuthController::class, 'login']);
     Route::post('register', [AuthController::class, 'register']);
     Route::post('forgot-password', [AuthController::class, 'forgotPassword']);
     Route::post('reset-password', [AuthController::class, 'resetPassword']);
 
+    // ✅ PROTEGIDAS
     Route::middleware('auth:api')->group(function () {
         Route::get('me', [AuthController::class, 'me']);
         Route::post('logout', [AuthController::class, 'logout']);
         Route::post('refresh', [AuthController::class, 'refresh']);
         Route::post('change-password', [AuthController::class, 'changePassword']);
         Route::put('profile', [AuthController::class, 'updateProfile']);
+        
+        // ✅ AVATAR - RUTAS CORREGIDAS
+        Route::post('update-avatar', [AuthController::class, 'updateAvatar']);
+        Route::delete('delete-avatar', [AuthController::class, 'deleteAvatar']);
     });
 });
 
@@ -52,7 +58,7 @@ Route::get('lawyers/search', [LawyerController::class, 'search']);
 Route::get('doctors/search', [DoctorController::class, 'search']);
 Route::get('associations/search', [AssociationController::class, 'search']);
 Route::get('shops/search', [ShopController::class, 'search']);
-Route::get('news/search', [NewsController::class, 'search']); // ✅ Agregado
+Route::get('news/search', [NewsController::class, 'search']);
 
 // 🔥 ÚLTIMOS (LATEST) - PÚBLICOS
 Route::get('associations/latest', [AssociationController::class, 'latest']);
@@ -61,7 +67,7 @@ Route::get('lawyers/latest', [LawyerController::class, 'latest']);
 Route::get('shops/latest', [ShopController::class, 'latest']);
 Route::get('products/latest', [ProductController::class, 'latest']);
 Route::get('services/latest', [ServiceController::class, 'latest']);
-Route::get('news/latest', [NewsController::class, 'latest']); // ✅ Ya existe
+Route::get('news/latest', [NewsController::class, 'latest']);
 
 // 🔥 BY SPECIALTY - PÚBLICOS
 Route::get('doctors/specialty/{specialty}', [DoctorController::class, 'bySpecialty']);
@@ -73,6 +79,16 @@ Route::prefix('news')->group(function () {
     Route::get('latest', [NewsController::class, 'latest']);
     Route::get('home', [NewsController::class, 'home']);
     Route::get('{id}', [NewsController::class, 'show']);
+});
+
+// 🔥 POSTS - PÚBLICOS (lectura)
+Route::prefix('posts')->group(function () {
+    Route::get('/', [PostController::class, 'index']);
+    Route::get('/home', [PostController::class, 'home']);
+    Route::get('/search', [PostController::class, 'search']);
+    Route::get('/{id}', [PostController::class, 'show']);
+    Route::get('/{id}/likes', [PostController::class, 'getLikes']);
+    Route::get('/{id}/comments', [CommentController::class, 'getPostComments']);
 });
 
 /*
@@ -157,26 +173,18 @@ Route::middleware('auth:api')->group(function () {
     | ACTUALIZACIÓN DE IMÁGENES - 🔥 RUTAS CORRECTAS
     |--------------------------------------------------------------------------
     */
-    // ✅ DOCTOR - CORREGIDO: ahora usa la ruta correcta con 'doctors'
+    // ✅ DOCTOR
     Route::post('/doctors/update-image', [DoctorController::class, 'updateImage']);
     Route::get('/doctors/image', [DoctorController::class, 'getImage']);
     
     // ✅ LAWYER
-    Route::post('/lawyer/image', [LawyerController::class, 'updateImage']);
+    Route::post('/lawyers/update-image', [LawyerController::class, 'updateImage']);
     
     // ✅ ASSOCIATION
-    Route::post('/association/image', [AssociationController::class, 'updateImage']);
+    Route::post('/associations/update-image', [AssociationController::class, 'updateImage']);
     
     // ✅ SHOP
-    Route::post('/shop/image', [ShopController::class, 'updateImage']);
-
-    /*
-    |--------------------------------------------------------------------------
-    | 🔥 AVATAR DE USUARIO
-    |--------------------------------------------------------------------------
-    */
-    Route::post('/user/avatar', [AuthController::class, 'updateAvatar']);
-    Route::delete('/user/avatar', [AuthController::class, 'deleteAvatar']);
+    Route::post('/shops/update-image', [ShopController::class, 'updateImage']);
 
     /*
     |--------------------------------------------------------------------------
@@ -207,46 +215,41 @@ Route::middleware('auth:api')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
-    | COMMENTS, POSTS, FEEDBACKS
+    | COMMENTS
     |--------------------------------------------------------------------------
     */
     Route::apiResource('comments', CommentController::class)->only(['index', 'store', 'show', 'destroy']);
+
+    /*
+    |--------------------------------------------------------------------------
+    | FEEDBACKS
+    |--------------------------------------------------------------------------
+    */
     Route::apiResource('feedbacks', FeedbackController::class)->only(['index', 'store', 'show', 'destroy']);
 
     /*
     |--------------------------------------------------------------------------
-    | POSTS ROUTES
+    | POSTS ROUTES - PROTEGIDAS (gestión)
     |--------------------------------------------------------------------------
     */
     Route::prefix('posts')->group(function () {
-        // 📖 PÚBLICAS (GET)
-        Route::get('/', [PostController::class, 'index']);
-        Route::get('/home', [PostController::class, 'home']);
-        Route::get('/search', [PostController::class, 'search']);
-        Route::get('/{id}', [PostController::class, 'show']);
-        Route::get('/{id}/likes', [PostController::class, 'getLikes']);
-        Route::get('/{id}/comments', [CommentController::class, 'getPostComments']);
-
-        // 🔒 PROTEGIDAS (requieren autenticación)
-        Route::middleware('auth:api')->group(function () {
-            // 📝 CRUD
-            Route::post('/', [PostController::class, 'store']);
-            Route::put('/{id}', [PostController::class, 'update']);
-            Route::delete('/{id}', [PostController::class, 'destroy']);
-            
-            // 🖼️ IMAGEN
-            Route::post('/{id}/image', [PostController::class, 'updateImage']);
-            
-            // 👤 MIS POSTS
-            Route::get('/my/latest', [PostController::class, 'myLatestPosts']);
-            
-            // 💬 COMENTARIOS
-            Route::post('/{id}/comments', [PostController::class, 'addComment']);
-            Route::delete('/comments/{id}', [PostController::class, 'deleteComment']);
-            
-            // ❤️ LIKES
-            Route::post('/{id}/like', [PostController::class, 'toggleLike']);
-        });
+        // 📝 CRUD
+        Route::post('/', [PostController::class, 'store']);
+        Route::put('{id}', [PostController::class, 'update']);
+        Route::delete('{id}', [PostController::class, 'destroy']);
+        
+        // 🖼️ IMAGEN
+        Route::post('{id}/image', [PostController::class, 'updateImage']);
+        
+        // 👤 MIS POSTS
+        Route::get('my/latest', [PostController::class, 'myLatestPosts']);
+        
+        // 💬 COMENTARIOS
+        Route::post('{id}/comments', [PostController::class, 'addComment']);
+        Route::delete('comments/{id}', [PostController::class, 'deleteComment']);
+        
+        // ❤️ LIKES
+        Route::post('{id}/like', [PostController::class, 'toggleLike']);
     });
 
     /*
@@ -254,58 +257,62 @@ Route::middleware('auth:api')->group(function () {
     | PRODUCTS ROUTES - COMENTARIOS
     |--------------------------------------------------------------------------
     */
-    Route::middleware('auth:api')->prefix('products')->group(function () {
-        Route::get('/{productId}/comments', [CommentController::class, 'getProductComments']);
-        Route::post('/{productId}/comments', [CommentController::class, 'storeProductComment']);
+    Route::prefix('products')->group(function () {
+        Route::get('{productId}/comments', [CommentController::class, 'getProductComments']);
+        Route::post('{productId}/comments', [CommentController::class, 'storeProductComment']);
     });
 
-    Route::delete('/product-comments/{id}', [CommentController::class, 'deleteProductComment']);
+    Route::delete('product-comments/{id}', [CommentController::class, 'deleteProductComment']);
 
     /*
     |--------------------------------------------------------------------------
-    | SERVICES ROUTES - COMENTARIOS ✅
+    | SERVICES ROUTES - COMENTARIOS E IMÁGENES
     |--------------------------------------------------------------------------
     */
-    Route::middleware('auth:api')->prefix('services')->group(function () {
-        // ✅ RUTAS DE IMÁGENES - AGREGADAS
+    Route::prefix('services')->group(function () {
+        // ✅ IMÁGENES
         Route::post('{id}/image', [ServiceController::class, 'updateImage']);
         Route::delete('{id}/image', [ServiceController::class, 'deleteImage']);
         
-        // Comentarios (ya existentes)
+        // Comentarios
         Route::get('{serviceId}/comments', [CommentController::class, 'getServiceComments']);
         Route::post('{serviceId}/comments', [CommentController::class, 'storeServiceComment']);
     });
 
-    Route::delete('/service-comments/{id}', [CommentController::class, 'deleteServiceComment']);
+    Route::delete('service-comments/{id}', [CommentController::class, 'deleteServiceComment']);
 
     /*
     |--------------------------------------------------------------------------
     | FAVORITES
     |--------------------------------------------------------------------------
     */
-    Route::post('/favorites/toggle', [FavoriteController::class, 'toggle']);
-    Route::get('/favorites/my', [FavoriteController::class, 'myFavorites']);
-    Route::get('/favorites/type/{type}', [FavoriteController::class, 'byType']);
-    Route::get('/favorites/check/{type}/{id}', [FavoriteController::class, 'check']);
+    Route::prefix('favorites')->group(function () {
+        Route::post('toggle', [FavoriteController::class, 'toggle']);
+        Route::get('my', [FavoriteController::class, 'myFavorites']);
+        Route::get('type/{type}', [FavoriteController::class, 'byType']);
+        Route::get('check/{type}/{id}', [FavoriteController::class, 'check']);
+    });
 
     /*
     |--------------------------------------------------------------------------
     | HISTORY
     |--------------------------------------------------------------------------
     */
-    Route::post('/history/store', [HistoryController::class, 'store']);
-    Route::get('/history/my', [HistoryController::class, 'myHistory']);
-    Route::get('/history/type/{type}', [HistoryController::class, 'byType']);
-    Route::get('/history/most-viewed/{type}', [HistoryController::class, 'mostViewed']);
-    Route::delete('/history/clear', [HistoryController::class, 'clear']);
+    Route::prefix('history')->group(function () {
+        Route::post('store', [HistoryController::class, 'store']);
+        Route::get('my', [HistoryController::class, 'myHistory']);
+        Route::get('type/{type}', [HistoryController::class, 'byType']);
+        Route::get('most-viewed/{type}', [HistoryController::class, 'mostViewed']);
+        Route::delete('clear', [HistoryController::class, 'clear']);
+    });
 
     /*
     |--------------------------------------------------------------------------
-    | LATEST POSTS Y SERVICES
+    | LATEST POSTS Y SERVICES (mis publicaciones)
     |--------------------------------------------------------------------------
     */
-    Route::get('/my-posts/latestPosts', [PostController::class, 'myLatestPosts']);
-    Route::get('/my-services/latestServices', [ServiceController::class, 'myLatestServices']);
+    Route::get('my-posts/latestPosts', [PostController::class, 'myLatestPosts']);
+    Route::get('my-services/latestServices', [ServiceController::class, 'myLatestServices']);
 });
 
 /*

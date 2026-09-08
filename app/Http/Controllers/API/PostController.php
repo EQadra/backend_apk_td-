@@ -15,6 +15,7 @@ use App\Models\Traits\UploadImage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Log;
 
 class PostController extends Controller
 {
@@ -26,98 +27,130 @@ class PostController extends Controller
      */
     public function index()
     {
-        $posts = Post::with([
-            'user',
-            'postable',
-            'comments.user'
-        ])
-        ->withCount('likes as likes_count')
-        ->latest()
-        ->get();
-
-        $user = Auth::user();
-        if ($user) {
-            $posts->each(function ($post) use ($user) {
-                $post->liked = Like::where([
-                    'user_id' => $user->id,
-                    'likeable_type' => 'App\\Models\\Post',
-                    'likeable_id' => $post->id
-                ])->exists();
-            });
-        }
-
-        return response()->json($posts, 200);
-    }
-
-    /**
-     * POST /api/posts
-     * Crear post
-     */
-    public function store(Request $request)
-    {
-        $request->validate([
-            'title'    => 'required|string|max:255',
-            'content'  => 'required|string',
-            'image'    => 'nullable|image|mimes:jpg,jpeg,png,webp|max:4096',
-            'category' => 'nullable|string|max:100',
-        ]);
-
-        $user = Auth::user();
-
-        $postableType = User::class;
-        $postableId   = $user->id;
-
-        if ($user->association) {
-            $postableType = Association::class;
-            $postableId   = $user->association->id;
-        } elseif ($user->doctor) {
-            $postableType = Doctor::class;
-            $postableId   = $user->doctor->id;
-        } elseif ($user->lawyer) {
-            $postableType = Lawyer::class;
-            $postableId   = $user->lawyer->id;
-        } elseif ($user->shop) {
-            $postableType = Shop::class;
-            $postableId   = $user->shop->id;
-        }
-
-        $imageUrl = null;
-
-        // ✅ MANEJO MANUAL DE IMAGEN (CORREGIDO)
-        if ($request->hasFile('image')) {
-            $file = $request->file('image');
-            $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
-            $destinationPath = '/home1/icjmeomy/apiapk.tudealer.app/public/imagenes_app/posts';
-            
-            if (!file_exists($destinationPath)) {
-                mkdir($destinationPath, 0755, true);
-            }
-            
-            $file->move($destinationPath, $filename);
-            $imageUrl = 'https://apiapk.tudealer.app/imagenes_app/posts/' . $filename;
-        } elseif ($request->input('image')) {
-            // ✅ Si es una URL string
-            $imageUrl = $request->input('image');
-        }
-
-        $post = Post::create([
-            'user_id'       => $user->id,
-            'title'         => $request->title,
-            'content'       => $request->content,
-            'image'         => $imageUrl,
-            'category'      => $request->category,
-            'postable_type' => $postableType,
-            'postable_id'   => $postableId,
-        ]);
-
-        return response()->json([
-            'message' => 'Post creado correctamente',
-            'data'    => $post->load([
+        try {
+            $posts = Post::with([
                 'user',
                 'postable',
                 'comments.user'
             ])
-        ], 201);
+            ->withCount('likes as likes_count')
+            ->latest()
+            ->get();
+
+            $user = Auth::user();
+            if ($user) {
+                $posts->each(function ($post) use ($user) {
+                    $post->liked = Like::where([
+                        'user_id' => $user->id,
+                        'likeable_type' => 'App\\Models\\Post',
+                        'likeable_id' => $post->id
+                    ])->exists();
+                });
+            }
+
+            return response()->json($posts, 200);
+
+        } catch (\Exception $e) {
+            Log::error('❌ Error en index posts: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al obtener posts'
+            ], 500);
+        }
+    }
+
+    /**
+     * POST /api/posts
+     * Crear post - CORREGIDO CON LOGS
+     */
+    public function store(Request $request)
+    {
+        try {
+            Log::info('📝 POST STORE INICIADO', [
+                'user_id' => Auth::id(),
+                'title' => $request->title,
+                'has_file' => $request->hasFile('image'),
+                'all_files' => $request->allFiles(),
+            ]);
+
+            // ✅ VALIDACIÓN
+            $validated = $request->validate([
+                'title'    => 'required|string|max:255',
+                'content'  => 'required|string',
+                'image'    => 'nullable|image|mimes:jpg,jpeg,png,webp|max:4096',
+                'category' => 'nullable|string|max:100',
+            ]);
+
+            $user = Auth::user();
+
+            $postableType = User::class;
+            $postableId   = $user->id;
+
+            if ($user->association) {
+                $postableType = Association::class;
+                $postableId   = $user->association->id;
+            } elseif ($user->doctor) {
+                $postableType = Doctor::class;
+                $postableId   = $user->doctor->id;
+            } elseif ($user->lawyer) {
+                $postableType = Lawyer::class;
+                $postableId   = $user->lawyer->id;
+            } elseif ($user->shop) {
+                $postableType = Shop::class;
+                $postableId   = $user->shop->id;
+            }
+
+            Log::info('📝 DATOS DEL POST', [
+                'postable_type' => $postableType,
+                'postable_id' => $postableId,
+            ]);
+
+            // ✅ CREAR POST
+            $post = Post::create([
+                'user_id'       => $user->id,
+                'title'         => $validated['title'],
+                'content'       => $validated['content'],
+                'category'      => $validated['category'] ?? null,
+                'postable_type' => $postableType,
+                'postable_id'   => $postableId,
+            ]);
+
+            Log::info('✅ POST CREADO', ['post_id' => $post->id]);
+
+            // ✅ SUBIR IMAGEN SI EXISTE
+            if ($request->hasFile('image')) {
+                Log::info('📤 SUBIENDO IMAGEN...');
+                $this->uploadImageToProduction($request, $post, 'posts', 'image');
+                Log::info('✅ IMAGEN SUBIDA', ['image' => $post->image]);
+            }
+
+            return response()->json([
+                'message' => 'Post creado correctamente',
+                'data'    => $post->load([
+                    'user',
+                    'postable',
+                    'comments.user'
+                ])
+            ], 201);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            Log::error('❌ Error de validación', [
+                'errors' => $e->errors(),
+                'input' => $request->all()
+            ]);
+            return response()->json([
+                'success' => false,
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            Log::error('❌ Error al crear post: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al crear el post: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     /**
@@ -126,24 +159,33 @@ class PostController extends Controller
      */
     public function show($id)
     {
-        $post = Post::with([
-            'user',
-            'postable',
-            'comments.user'
-        ])
-        ->withCount('likes as likes_count')
-        ->findOrFail($id);
+        try {
+            $post = Post::with([
+                'user',
+                'postable',
+                'comments.user'
+            ])
+            ->withCount('likes as likes_count')
+            ->findOrFail($id);
 
-        $user = Auth::user();
-        if ($user) {
-            $post->liked = Like::where([
-                'user_id' => $user->id,
-                'likeable_type' => 'App\\Models\\Post',
-                'likeable_id' => $post->id
-            ])->exists();
+            $user = Auth::user();
+            if ($user) {
+                $post->liked = Like::where([
+                    'user_id' => $user->id,
+                    'likeable_type' => 'App\\Models\\Post',
+                    'likeable_id' => $post->id
+                ])->exists();
+            }
+
+            return response()->json($post, 200);
+
+        } catch (\Exception $e) {
+            Log::error('❌ Error al mostrar post: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Post no encontrado'
+            ], 404);
         }
-
-        return response()->json($post, 200);
     }
 
     /**
@@ -152,28 +194,37 @@ class PostController extends Controller
      */
     public function home()
     {
-        $posts = Post::with([
-            'user',
-            'postable',
-            'comments.user'
-        ])
-        ->withCount('likes as likes_count')
-        ->latest()
-        ->take(10)
-        ->get();
+        try {
+            $posts = Post::with([
+                'user',
+                'postable',
+                'comments.user'
+            ])
+            ->withCount('likes as likes_count')
+            ->latest()
+            ->take(10)
+            ->get();
 
-        $user = Auth::user();
-        if ($user) {
-            $posts->each(function ($post) use ($user) {
-                $post->liked = Like::where([
-                    'user_id' => $user->id,
-                    'likeable_type' => 'App\\Models\\Post',
-                    'likeable_id' => $post->id
-                ])->exists();
-            });
+            $user = Auth::user();
+            if ($user) {
+                $posts->each(function ($post) use ($user) {
+                    $post->liked = Like::where([
+                        'user_id' => $user->id,
+                        'likeable_type' => 'App\\Models\\Post',
+                        'likeable_id' => $post->id
+                    ])->exists();
+                });
+            }
+
+            return response()->json($posts, 200);
+
+        } catch (\Exception $e) {
+            Log::error('❌ Error en home posts: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al obtener posts'
+            ], 500);
         }
-
-        return response()->json($posts, 200);
     }
 
     /**
@@ -182,71 +233,62 @@ class PostController extends Controller
      */
     public function update(Request $request, $id)
     {
-        $post = Post::findOrFail($id);
+        try {
+            $post = Post::findOrFail($id);
 
-        $user = Auth::user();
-        $isOwner = $post->user_id === $user->id;
-        $isAdmin = $user->hasRole('admin');
-        $isProfileOwner = false;
+            $user = Auth::user();
+            $isOwner = $post->user_id === $user->id;
+            $isAdmin = $user->hasRole('admin');
+            $isProfileOwner = false;
 
-        if ($post->postable && isset($post->postable->user_id)) {
-            $isProfileOwner = $post->postable->user_id === $user->id;
-        }
+            if ($post->postable && isset($post->postable->user_id)) {
+                $isProfileOwner = $post->postable->user_id === $user->id;
+            }
 
-        if (!$isOwner && !$isAdmin && !$isProfileOwner) {
+            if (!$isOwner && !$isAdmin && !$isProfileOwner) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No autorizado para editar este post'
+                ], 403);
+            }
+
+            $request->validate([
+                'title'    => 'sometimes|required|string|max:255',
+                'content'  => 'sometimes|required|string',
+                'image'    => 'nullable|image|mimes:jpg,jpeg,png,webp|max:4096',
+                'category' => 'nullable|string|max:100',
+            ]);
+
+            // ✅ ACTUALIZAR DATOS
+            $post->update($request->only([
+                'title',
+                'content',
+                'category'
+            ]));
+
+            // ✅ SUBIR NUEVA IMAGEN SI EXISTE
+            if ($request->hasFile('image')) {
+                $this->uploadImageToProduction($request, $post, 'posts', 'image');
+            }
+
             return response()->json([
-                'message' => 'No autorizado para editar este post'
-            ], 403);
+                'success' => true,
+                'message' => 'Post actualizado correctamente',
+                'data'    => $post->load([
+                    'user',
+                    'postable',
+                    'comments.user'
+                ])
+            ], 200);
+
+        } catch (\Exception $e) {
+            Log::error('❌ Error al actualizar post: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al actualizar el post',
+                'error' => $e->getMessage()
+            ], 500);
         }
-
-        $request->validate([
-            'title'    => 'sometimes|required|string|max:255',
-            'content'  => 'sometimes|required|string',
-            'image'    => 'nullable|image|mimes:jpg,jpeg,png,webp|max:4096',
-            'category' => 'nullable|string|max:100',
-        ]);
-
-        // ✅ Actualizar imagen si se envía una nueva
-        if ($request->hasFile('image')) {
-            // Eliminar imagen anterior si existe
-            if ($post->image) {
-                $this->deleteImageFromProduction($post->image);
-            }
-
-            $file = $request->file('image');
-            $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
-            $destinationPath = '/home1/icjmeomy/apiapk.tudealer.app/public/imagenes_app/posts';
-            
-            if (!file_exists($destinationPath)) {
-                mkdir($destinationPath, 0755, true);
-            }
-            
-            $file->move($destinationPath, $filename);
-            $imageUrl = 'https://apiapk.tudealer.app/imagenes_app/posts/' . $filename;
-            
-            $post->image = $imageUrl;
-        }
-
-        // ✅ Si se envía una URL de imagen directamente
-        if ($request->has('image') && is_string($request->image) && !$request->hasFile('image')) {
-            $post->image = $request->image;
-        }
-
-        // Actualizar campos
-        $post->update($request->only([
-            'title',
-            'content',
-            'category'
-        ]));
-
-        return response()->json([
-            'message' => 'Post actualizado correctamente',
-            'data'    => $post->load([
-                'user',
-                'postable',
-                'comments.user'
-            ])
-        ], 200);
     }
 
     /**
@@ -255,50 +297,74 @@ class PostController extends Controller
      */
     public function destroy($id)
     {
-        $post = Post::findOrFail($id);
+        try {
+            $post = Post::findOrFail($id);
 
-        $user = Auth::user();
-        $isOwner = $post->user_id === $user->id;
-        $isAdmin = $user->hasRole('admin');
-        $isProfileOwner = false;
+            $user = Auth::user();
+            $isOwner = $post->user_id === $user->id;
+            $isAdmin = $user->hasRole('admin');
+            $isProfileOwner = false;
 
-        if ($post->postable && isset($post->postable->user_id)) {
-            $isProfileOwner = $post->postable->user_id === $user->id;
-        }
+            if ($post->postable && isset($post->postable->user_id)) {
+                $isProfileOwner = $post->postable->user_id === $user->id;
+            }
 
-        if (!$isOwner && !$isAdmin && !$isProfileOwner) {
+            if (!$isOwner && !$isAdmin && !$isProfileOwner) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No autorizado para eliminar este post'
+                ], 403);
+            }
+
+            // ✅ ELIMINAR IMAGEN
+            if ($post->image) {
+                $this->deleteImageFromProduction($post->image);
+            }
+            
+            $post->comments()->delete();
+            $post->likes()->delete();
+            $post->delete();
+
             return response()->json([
-                'message' => 'No autorizado para eliminar este post'
-            ], 403);
+                'success' => true,
+                'message' => 'Post eliminado correctamente'
+            ], 200);
+
+        } catch (\Exception $e) {
+            Log::error('❌ Error al eliminar post: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al eliminar el post',
+                'error' => $e->getMessage()
+            ], 500);
         }
-
-        // Eliminar imagen y el post
-        $this->deleteImageFromProduction($post->image);
-        $post->comments()->delete();
-        $post->likes()->delete();
-        $post->delete();
-
-        return response()->json([
-            'message' => 'Post eliminado correctamente'
-        ], 200);
     }
 
     /**
-     * GET /api/posts/my
+     * GET /api/posts/my/latest
      * Mis posts
      */
     public function myLatestPosts()
     {
-        return response()->json(
-            Auth::user()
+        try {
+            $posts = Auth::user()
                 ->posts()
                 ->with([
                     'user',
                     'postable'
                 ])
                 ->latest()
-                ->get()
-        );
+                ->get();
+
+            return response()->json($posts, 200);
+
+        } catch (\Exception $e) {
+            Log::error('❌ Error en myLatestPosts: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al obtener tus posts'
+            ], 500);
+        }
     }
 
     /**
@@ -307,40 +373,49 @@ class PostController extends Controller
      */
     public function addComment(Request $request, $id)
     {
-        $post = Post::find($id);
+        try {
+            $post = Post::find($id);
 
-        if (!$post) {
+            if (!$post) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Post no encontrado'
+                ], 404);
+            }
+
+            $validator = Validator::make($request->all(), [
+                'content' => 'required|string|min:1|max:500',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $comment = Comment::create([
+                'user_id' => Auth::id(),
+                'commentable_type' => 'App\\Models\\Post',
+                'commentable_id' => $post->id,
+                'content' => $request->content,
+            ]);
+
+            $comment->load('user');
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Comentario agregado exitosamente',
+                'data' => $comment
+            ], 201);
+
+        } catch (\Exception $e) {
+            Log::error('❌ Error al agregar comentario: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => 'Post no encontrado'
-            ], 404);
+                'message' => 'Error al agregar comentario'
+            ], 500);
         }
-
-        $validator = Validator::make($request->all(), [
-            'content' => 'required|string|min:1|max:500',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'errors' => $validator->errors()
-            ], 422);
-        }
-
-        $comment = Comment::create([
-            'user_id' => Auth::id(),
-            'commentable_type' => 'App\\Models\\Post',
-            'commentable_id' => $post->id,
-            'content' => $request->content,
-        ]);
-
-        $comment->load('user');
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Comentario agregado exitosamente',
-            'data' => $comment
-        ], 201);
     }
 
     /**
@@ -349,28 +424,37 @@ class PostController extends Controller
      */
     public function deleteComment($id)
     {
-        $comment = Comment::find($id);
+        try {
+            $comment = Comment::find($id);
 
-        if (!$comment) {
+            if (!$comment) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Comentario no encontrado'
+                ], 404);
+            }
+
+            if ($comment->user_id !== Auth::id() && !Auth::user()->hasRole('admin')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No autorizado para eliminar este comentario'
+                ], 403);
+            }
+
+            $comment->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Comentario eliminado correctamente'
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('❌ Error al eliminar comentario: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => 'Comentario no encontrado'
-            ], 404);
+                'message' => 'Error al eliminar comentario'
+            ], 500);
         }
-
-        if ($comment->user_id !== Auth::id() && !Auth::user()->hasRole('admin')) {
-            return response()->json([
-                'success' => false,
-                'message' => 'No autorizado para eliminar este comentario'
-            ], 403);
-        }
-
-        $comment->delete();
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Comentario eliminado correctamente'
-        ]);
     }
 
     /**
@@ -379,54 +463,63 @@ class PostController extends Controller
      */
     public function toggleLike($id)
     {
-        $user = Auth::user();
-        $post = Post::find($id);
+        try {
+            $user = Auth::user();
+            $post = Post::find($id);
 
-        if (!$post) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Post no encontrado'
-            ], 404);
-        }
+            if (!$post) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Post no encontrado'
+                ], 404);
+            }
 
-        $existingLike = Like::where([
-            'user_id' => $user->id,
-            'likeable_type' => 'App\\Models\\Post',
-            'likeable_id' => $post->id
-        ])->first();
-
-        if ($existingLike) {
-            $existingLike->delete();
-            $likesCount = $post->likes()->count();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Like eliminado',
-                'data' => [
-                    'liked' => false,
-                    'likes_count' => $likesCount,
-                    'post_id' => $post->id
-                ]
-            ]);
-        } else {
-            $like = Like::create([
+            $existingLike = Like::where([
                 'user_id' => $user->id,
                 'likeable_type' => 'App\\Models\\Post',
                 'likeable_id' => $post->id
-            ]);
+            ])->first();
 
-            $likesCount = $post->likes()->count();
+            if ($existingLike) {
+                $existingLike->delete();
+                $likesCount = $post->likes()->count();
 
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Like eliminado',
+                    'data' => [
+                        'liked' => false,
+                        'likes_count' => $likesCount,
+                        'post_id' => $post->id
+                    ]
+                ]);
+            } else {
+                $like = Like::create([
+                    'user_id' => $user->id,
+                    'likeable_type' => 'App\\Models\\Post',
+                    'likeable_id' => $post->id
+                ]);
+
+                $likesCount = $post->likes()->count();
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Like agregado',
+                    'data' => [
+                        'liked' => true,
+                        'likes_count' => $likesCount,
+                        'post_id' => $post->id,
+                        'like' => $like
+                    ]
+                ], 201);
+            }
+
+        } catch (\Exception $e) {
+            Log::error('❌ Error al toggle like: ' . $e->getMessage());
             return response()->json([
-                'success' => true,
-                'message' => 'Like agregado',
-                'data' => [
-                    'liked' => true,
-                    'likes_count' => $likesCount,
-                    'post_id' => $post->id,
-                    'like' => $like
-                ]
-            ], 201);
+                'success' => false,
+                'message' => 'Error al procesar el like'
+            ], 500);
         }
     }
 
@@ -436,30 +529,39 @@ class PostController extends Controller
      */
     public function getLikes($id)
     {
-        $post = Post::find($id);
+        try {
+            $post = Post::find($id);
 
-        if (!$post) {
+            if (!$post) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Post no encontrado'
+                ], 404);
+            }
+
+            $likesCount = $post->likes()->count();
+            $likedByUser = false;
+
+            if (Auth::check()) {
+                $likedByUser = Like::where([
+                    'user_id' => Auth::id(),
+                    'likeable_type' => 'App\\Models\\Post',
+                    'likeable_id' => $post->id
+                ])->exists();
+            }
+
+            return response()->json([
+                'likes_count' => $likesCount,
+                'liked_by_user' => $likedByUser
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('❌ Error al obtener likes: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => 'Post no encontrado'
-            ], 404);
+                'message' => 'Error al obtener likes'
+            ], 500);
         }
-
-        $likesCount = $post->likes()->count();
-        $likedByUser = false;
-
-        if (Auth::check()) {
-            $likedByUser = Like::where([
-                'user_id' => Auth::id(),
-                'likeable_type' => 'App\\Models\\Post',
-                'likeable_id' => $post->id
-            ])->exists();
-        }
-
-        return response()->json([
-            'likes_count' => $likesCount,
-            'liked_by_user' => $likedByUser
-        ]);
     }
 
     /**
@@ -468,20 +570,33 @@ class PostController extends Controller
      */
     public function search(Request $request)
     {
-        $query = $request->get('q', '');
+        try {
+            $query = $request->get('q', '');
 
-        $posts = Post::with([
-            'user',
-            'postable',
-            'comments.user'
-        ])
-        ->where('title', 'LIKE', "%{$query}%")
-        ->orWhere('content', 'LIKE', "%{$query}%")
-        ->orWhere('category', 'LIKE', "%{$query}%")
-        ->latest()
-        ->get();
+            if (empty($query)) {
+                return response()->json([]);
+            }
 
-        return response()->json($posts);
+            $posts = Post::with([
+                'user',
+                'postable',
+                'comments.user'
+            ])
+            ->where('title', 'LIKE', "%{$query}%")
+            ->orWhere('content', 'LIKE', "%{$query}%")
+            ->orWhere('category', 'LIKE', "%{$query}%")
+            ->latest()
+            ->get();
+
+            return response()->json($posts);
+
+        } catch (\Exception $e) {
+            Log::error('❌ Error en search posts: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al buscar posts'
+            ], 500);
+        }
     }
 
     /**
@@ -490,42 +605,31 @@ class PostController extends Controller
      */
     public function updateImage(Request $request, $id)
     {
-        $post = Post::findOrFail($id);
+        try {
+            $post = Post::findOrFail($id);
 
-        // Verificar permisos
-        if ($post->user_id !== Auth::id() && !Auth::user()->hasRole('admin')) {
+            // Verificar permisos
+            if ($post->user_id !== Auth::id() && !Auth::user()->hasRole('admin')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No autorizado'
+                ], 403);
+            }
+
+            $request->validate([
+                'image' => 'required|image|mimes:jpg,jpeg,png,webp|max:4096',
+            ]);
+
+            // ✅ USAR EL TRAIT PARA SUBIR LA IMAGEN
+            return $this->uploadImageToProduction($request, $post, 'posts', 'image');
+
+        } catch (\Exception $e) {
+            Log::error('❌ Error al actualizar imagen del post: ' . $e->getMessage());
             return response()->json([
-                'message' => 'No autorizado'
-            ], 403);
+                'success' => false,
+                'message' => 'Error al actualizar la imagen',
+                'error' => $e->getMessage()
+            ], 500);
         }
-
-        $request->validate([
-            'image' => 'required|image|mimes:jpg,jpeg,png,webp|max:4096',
-        ]);
-
-        // Eliminar imagen anterior
-        if ($post->image) {
-            $this->deleteImageFromProduction($post->image);
-        }
-
-        // Subir nueva imagen
-        $file = $request->file('image');
-        $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
-        $destinationPath = '/home1/icjmeomy/apiapk.tudealer.app/public/imagenes_app/posts';
-        
-        if (!file_exists($destinationPath)) {
-            mkdir($destinationPath, 0755, true);
-        }
-        
-        $file->move($destinationPath, $filename);
-        $imageUrl = 'https://apiapk.tudealer.app/imagenes_app/posts/' . $filename;
-
-        $post->image = $imageUrl;
-        $post->save();
-
-        return response()->json([
-            'message' => 'Imagen actualizada correctamente',
-            'data' => $post
-        ], 200);
     }
 }

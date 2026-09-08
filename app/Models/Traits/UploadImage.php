@@ -4,25 +4,19 @@ namespace App\Models\Traits;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 use Exception;
 
 trait UploadImage
 {
     /**
-     * Subir imagen usando Storage de Laravel
-     * 
-     * @param Request $request
-     * @param mixed $model
-     * @param string $folder - 'productos', 'doctors', 'lawyers', 'associations', 'shops'
-     * @param string $fieldName - nombre del campo de la imagen (por defecto 'image')
-     * @return \Illuminate\Http\JsonResponse
+     * Subir imagen al servidor
      */
     protected function uploadImageToProduction(Request $request, $model, string $folder, string $fieldName = 'image')
     {
         try {
             if (!$request->hasFile($fieldName)) {
                 return response()->json([
+                    'success' => false,
                     'error' => 'No se encontró ninguna imagen'
                 ], 422);
             }
@@ -31,35 +25,48 @@ trait UploadImage
             
             if (!$file->isValid() || !in_array($file->getMimeType(), ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'])) {
                 return response()->json([
+                    'success' => false,
                     'error' => 'Formato de imagen no válido. Use JPG, PNG o WEBP'
                 ], 422);
             }
 
             $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
             
-            // ✅ GUARDAR EN STORAGE
-            $path = $file->storeAs('imagenes_app/' . $folder, $filename, 'public');
-            
-            if (!$path) {
-                return response()->json([
-                    'error' => 'Error al guardar la imagen en el servidor'
-                ], 500);
-            }
-
-            // ✅ URL CON STORAGE
             $isDevelopment = env('APP_ENV') === 'local' || env('APP_ENV') === 'development';
             
             if ($isDevelopment) {
-                $imageUrl = 'http://192.168.203.82:8000/storage/' . $path;
+                // 📱 DESARROLLO (WAMP / Local)
+                $destinationPath = public_path('imagenes_app/' . $folder);
+                if (!file_exists($destinationPath)) {
+                    mkdir($destinationPath, 0755, true);
+                }
+                $file->move($destinationPath, $filename);
+                $baseUrl = env('APP_URL', 'http://192.168.203.82:8000');
+                $imageUrl = $baseUrl . '/imagenes_app/' . $folder . '/' . $filename;
             } else {
-                $imageUrl = 'https://apiapk.tudealer.app/storage/' . $path;
+                // 🌐 PRODUCCIÓN
+                $destinationPath = '/home1/icjmeomy/apiapk.tudealer.app/public/imagenes_app/' . $folder;
+                if (!file_exists($destinationPath)) {
+                    mkdir($destinationPath, 0755, true);
+                }
+                $file->move($destinationPath, $filename);
+                $baseUrl = env('APP_URL', 'https://apiapk.tudealer.app');
+                $imageUrl = $baseUrl . '/imagenes_app/' . $folder . '/' . $filename;
             }
             
+            // ✅ ELIMINAR IMAGEN ANTERIOR SI EXISTE
             if ($model->$fieldName) {
                 $this->deleteImageFromProduction($model->$fieldName);
             }
             
+            // ✅ ACTUALIZAR MODELO
             $model->update([$fieldName => $imageUrl]);
+            
+            Log::info('✅ Imagen subida correctamente', [
+                'folder' => $folder,
+                'filename' => $filename,
+                'url' => $imageUrl,
+            ]);
             
             return response()->json([
                 'success' => true,
@@ -68,13 +75,15 @@ trait UploadImage
                     'image_url' => $imageUrl,
                     'image' => $imageUrl,
                     'filename' => $filename,
-                    'path' => $path
                 ]
             ], 200);
             
         } catch (Exception $e) {
-            Log::error('Error al subir imagen: ' . $e->getMessage());
+            Log::error('❌ Error al subir imagen: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
             return response()->json([
+                'success' => false,
                 'error' => 'Error al subir la imagen',
                 'message' => $e->getMessage()
             ], 500);
@@ -82,25 +91,56 @@ trait UploadImage
     }
 
     /**
-     * Eliminar imagen del servidor usando Storage
+     * Eliminar imagen del servidor
      */
     protected function deleteImageFromProduction(?string $imageUrl)
     {
-        if (!$imageUrl) return;
+        if (!$imageUrl) return false;
         
         try {
+            $isDevelopment = env('APP_ENV') === 'local' || env('APP_ENV') === 'development';
             $cleanUrl = explode('?', $imageUrl)[0];
             
-            if (strpos($cleanUrl, '/storage/') !== false) {
-                $path = substr($cleanUrl, strpos($cleanUrl, '/storage/') + 9);
-                
-                if (Storage::disk('public')->exists($path)) {
-                    Storage::disk('public')->delete($path);
-                    Log::info('Imagen eliminada: ' . $path);
-                }
+            if ($isDevelopment) {
+                $baseUrl = env('APP_URL', 'http://192.168.203.82:8000');
+                $relativePath = str_replace($baseUrl, '', $cleanUrl);
+                $relativePath = ltrim($relativePath, '/');
+                $fullPath = public_path($relativePath);
+            } else {
+                $baseUrl = env('APP_URL', 'https://apiapk.tudealer.app');
+                $relativePath = str_replace($baseUrl, '', $cleanUrl);
+                $relativePath = ltrim($relativePath, '/');
+                $fullPath = '/home1/icjmeomy/apiapk.tudealer.app/public/' . $relativePath;
             }
+            
+            if (file_exists($fullPath)) {
+                unlink($fullPath);
+                Log::info('✅ Imagen eliminada: ' . $fullPath);
+                return true;
+            }
+            
+            return false;
         } catch (Exception $e) {
-            Log::error('Error al eliminar imagen: ' . $e->getMessage());
+            Log::error('❌ Error al eliminar imagen: ' . $e->getMessage());
+            return false;
         }
+    }
+
+    /**
+     * Obtener URL completa de la imagen
+     */
+    protected function getFullImageUrl(?string $imagePath): ?string
+    {
+        if (!$imagePath) return null;
+        if (filter_var($imagePath, FILTER_VALIDATE_URL)) {
+            return $imagePath;
+        }
+        
+        $isDevelopment = env('APP_ENV') === 'local' || env('APP_ENV') === 'development';
+        $baseUrl = $isDevelopment 
+            ? env('APP_URL', 'http://192.168.203.82:8000')
+            : env('APP_URL', 'https://apiapk.tudealer.app');
+        
+        return $baseUrl . '/' . ltrim($imagePath, '/');
     }
 }

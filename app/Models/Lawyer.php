@@ -6,10 +6,11 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Traits\BelongsToUser;
 use App\Models\Traits\HasServices;
+use App\Models\Traits\UploadImage; // ✅ TRAIT PARA IMAGEN
 
 class Lawyer extends Model
 {
-    use HasFactory, BelongsToUser, HasServices;
+    use HasFactory, BelongsToUser, HasServices, UploadImage; // ✅ AGREGADO TRAIT
 
     protected $fillable = [
         'user_id',
@@ -22,12 +23,22 @@ class Lawyer extends Model
         'university',
         'image',
         'schedule',
-        // Nuevos campos de teléfono
         'phone',
         'office_phone',
+        'sexo',
     ];
 
-    // Relaciones
+    protected $appends = [
+        'image_url',
+        'formatted_phone',
+        'formatted_office_phone',
+        'full_name',
+    ];
+
+    // ============================================================
+    // RELACIONES
+    // ============================================================
+
     public function user()
     {
         return $this->belongsTo(User::class);
@@ -68,16 +79,18 @@ class Lawyer extends Model
         return $this->morphMany(History::class, 'historyable');
     }
 
-    // Accessors
-    protected $appends = ['image_url', 'formatted_phone', 'formatted_office_phone'];
+    // ============================================================
+    // ACCESSORS
+    // ============================================================
+
+    public function getFullNameAttribute()
+    {
+        return $this->first_name . ' ' . $this->last_name;
+    }
 
     public function getImageUrlAttribute()
     {
-        if (!$this->image) {
-            return null;
-        }
-
-        return asset('storage/' . $this->image);
+        return $this->getFullImageUrl($this->image);
     }
 
     public function getFormattedPhoneAttribute()
@@ -89,6 +102,10 @@ class Lawyer extends Model
     {
         return $this->formatPhoneNumber($this->office_phone);
     }
+
+    // ============================================================
+    // MÉTODOS PRIVADOS
+    // ============================================================
 
     private function formatPhoneNumber($phone)
     {
@@ -104,6 +121,36 @@ class Lawyer extends Model
             return substr($cleaned, 0, 2) . ' ' . substr($cleaned, 2, 3) . ' ' . substr($cleaned, 5);
         }
         
+        if (strlen($cleaned) >= 10) {
+            $countryCode = substr($cleaned, 0, strlen($cleaned) - 9);
+            $number = substr($cleaned, -9);
+            return '+' . $countryCode . ' ' . substr($number, 0, 3) . ' ' . substr($number, 3, 3) . ' ' . substr($number, 6);
+        }
+        
         return $phone;
+    }
+
+    // ============================================================
+    // MÉTODOS HELPER PARA IMÁGENES
+    // ============================================================
+
+    public function hasImage(): bool
+    {
+        return !is_null($this->image);
+    }
+
+    public function uploadImage($request)
+    {
+        return $this->uploadImageToProduction($request, $this, 'lawyers', 'image');
+    }
+
+    public function deleteImage()
+    {
+        if ($this->image) {
+            $this->deleteImageFromProduction($this->image);
+            $this->update(['image' => null]);
+            return true;
+        }
+        return false;
     }
 }

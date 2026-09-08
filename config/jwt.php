@@ -1,16 +1,6 @@
 <?php
 
-/*
- * This file is part of jwt-auth.
- *
- * (c) Sean Tymon <tymon148@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
-
 return [
-
     /*
     |--------------------------------------------------------------------------
     | JWT Authentication Secret
@@ -45,7 +35,6 @@ return [
     */
 
     'keys' => [
-
         /*
         |--------------------------------------------------------------------------
         | Public Key
@@ -82,7 +71,6 @@ return [
         */
 
         'passphrase' => env('JWT_PASSPHRASE'),
-
     ],
 
     /*
@@ -91,7 +79,7 @@ return [
     |--------------------------------------------------------------------------
     |
     | Specify the length of time (in minutes) that the token will be valid for.
-    | Defaults to 1 hour.
+    | Defaults to 1 hour (60 minutes).
     |
     | You can also set this to null, to yield a never expiring token.
     | Some people may want this behaviour for e.g. a mobile app.
@@ -101,7 +89,7 @@ return [
     |
     */
 
-    'ttl' => env('JWT_TTL', 60),
+    'ttl' => env('JWT_TTL', 1440), // ✅ 24 HORAS POR DEFECTO
 
     /*
     |--------------------------------------------------------------------------
@@ -111,16 +99,16 @@ return [
     | Specify the length of time (in minutes) that the token can be refreshed
     | within. I.E. The user can refresh their token within a 2 week window of
     | the original token being created until they must re-authenticate.
-    | Defaults to 2 weeks.
+    | Defaults to 2 weeks (20160 minutes).
     |
     | You can also set this to null, to yield an infinite refresh time.
-    | Some may want this instead of never expiring tokens for e.g. a mobile app.
+    | Some may want this behaviour for e.g. a mobile app.
     | This is not particularly recommended, so make sure you have appropriate
     | systems in place to revoke the token if necessary.
     |
     */
 
-    'refresh_ttl' => env('JWT_REFRESH_TTL', 20160),
+    'refresh_ttl' => env('JWT_REFRESH_TTL', 43200), // ✅ 30 DÍAS PARA REFRESCAR
 
     /*
     |--------------------------------------------------------------------------
@@ -131,7 +119,7 @@ return [
     |
     */
 
-    'algo' => env('JWT_ALGO', Tymon\JWTAuth\Providers\JWT\Provider::ALGO_HS256),
+    'algo' => env('JWT_ALGO', 'HS256'),
 
     /*
     |--------------------------------------------------------------------------
@@ -178,13 +166,11 @@ return [
     |
     | This will determine whether a `prv` claim is automatically added to
     | the token. The purpose of this is to ensure that if you have multiple
-    | authentication models e.g. `App\User` & `App\OtherPerson`, then we
-    | should prevent one authentication request from impersonating another,
-    | if 2 tokens happen to have the same id across the 2 different models.
+    | authentication models e.g. `App\Models\User` and `App\OtherPerson`,
+    | then we should prevent one authentication request from impersonating
+    | another unnecessarily if the JWT payload is not completely trusted.
     |
-    | Under specific circumstances, you may want to disable this behaviour
-    | e.g. if you only have one authentication model, then you would save
-    | a little on token size.
+    | https://github.com/tymondesigns/jwt-auth/wiki/Locking-Subject
     |
     */
 
@@ -196,12 +182,9 @@ return [
     |--------------------------------------------------------------------------
     |
     | This property gives the jwt timestamp claims some "leeway".
-    | Meaning that if you have any unavoidable slight clock skew on
-    | any of your servers then this will afford you some level of cushioning.
-    |
-    | This applies to the claims `iat`, `nbf` and `exp`.
-    |
-    | Specify in seconds - only if you know you need it.
+    | Meaning that if you have any unavoidable shifts between systems on
+    | different networks, it will allow these small shifts to not throw
+    | the token invalid.
     |
     */
 
@@ -213,7 +196,7 @@ return [
     |--------------------------------------------------------------------------
     |
     | In order to invalidate tokens, you must have the blacklist enabled.
-    | If you do not want or need this functionality, then set this to false.
+    | If you do not want or need this functionality, then set this value to false.
     |
     */
 
@@ -239,14 +222,13 @@ return [
     | Cookies encryption
     |--------------------------------------------------------------------------
     |
-    | By default Laravel encrypt cookies for security reason.
-    | If you decide to not decrypt cookies, you will have to configure Laravel
-    | to not encrypt your cookie token by adding its name into the $except
-    | array available in the middleware "EncryptCookies" provided by Laravel.
-    | see https://laravel.com/docs/master/responses#cookies-and-encryption
-    | for details.
-    |
-    | Set it to true if you want to decrypt cookies.
+    | By default Laravel encrypts cookies for security, however if you decide
+    | to not decrypt cookies, you will need to modify the way cookies are
+    | sent and received. Set this value to true if you want to decrypt
+    | cookies. Note: Laravel cookie encryption is enabled by default,
+    | and encrypts all cookies sent over the wire. If you set this to true,
+    | Laravel will NOT encrypt the cookie, but remember that it is not
+    | recommended to send JWT tokens over unencrypted cookies.
     |
     */
 
@@ -262,7 +244,6 @@ return [
     */
 
     'providers' => [
-
         /*
         |--------------------------------------------------------------------------
         | JWT Provider
@@ -295,7 +276,5 @@ return [
         */
 
         'storage' => Tymon\JWTAuth\Providers\Storage\Illuminate::class,
-
     ],
-
 ];

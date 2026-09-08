@@ -6,10 +6,11 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Traits\BelongsToUser;
+use App\Models\Traits\UploadImage;
 
 class Post extends Model
 {
-    use HasFactory, BelongsToUser;
+    use HasFactory, BelongsToUser, UploadImage;
 
     protected $fillable = [
         'user_id',
@@ -50,7 +51,6 @@ class Post extends Model
         return $this->morphMany(Comment::class, 'commentable');
     }
 
-    // ✅ RELACIÓN CON LIKES (AGREGAR ESTO)
     public function likes()
     {
         return $this->morphMany(Like::class, 'likeable');
@@ -62,15 +62,7 @@ class Post extends Model
 
     public function getImageUrlAttribute()
     {
-        if (!$this->image) {
-            return null;
-        }
-
-        if (str_starts_with($this->image, 'http')) {
-            return $this->image;
-        }
-
-        return asset('storage/' . $this->image);
+        return $this->getFullImageUrl($this->image);
     }
 
     public function getShortContentAttribute()
@@ -94,6 +86,10 @@ class Post extends Model
         return $query->where('category', $category);
     }
 
+    /* =======================
+     | RELACIONES ADICIONALES
+     ======================= */
+
     public function favorites()
     {
         return $this->morphMany(Favorite::class, 'favoritable');
@@ -103,5 +99,4 @@ class Post extends Model
     {
         return $this->morphMany(History::class, 'historyable');
     }
-
 }

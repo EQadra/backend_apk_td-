@@ -1,15 +1,16 @@
 <?php
+
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Traits\BelongsToUser;
 use App\Models\Traits\HasProducts;
-
+use App\Models\Traits\UploadImage; // ✅ TRAIT PARA IMAGEN
 
 class Shop extends Model
 {
-    use HasFactory, BelongsToUser, HasProducts;
+    use HasFactory, BelongsToUser, HasProducts, UploadImage; // ✅ AGREGADO TRAIT
 
     protected $fillable = [
         'user_id',
@@ -20,7 +21,19 @@ class Shop extends Model
         'phone',
         'image',
         'schedule',
+        'ruc',
+        'category',
+        'sexo',
     ];
+
+    protected $appends = [
+        'image_url',
+        'formatted_phone',
+    ];
+
+    // ============================================================
+    // RELACIONES
+    // ============================================================
 
     public function user()
     {
@@ -42,36 +55,88 @@ class Shop extends Model
         return $this->morphMany(News::class, 'newable');
     }
 
-
-public function posts()
-{
-    return $this->morphMany(Post::class, 'postable');
-}
-
-protected $appends = ['image_url'];
-
-public function getImageUrlAttribute()
-{
-    if (!$this->image) {
-        return null;
+    public function posts()
+    {
+        return $this->morphMany(Post::class, 'postable');
     }
-
-    return asset('storage/' . $this->image);
-}
-
 
     public function comments()
     {
         return $this->hasMany(Comment::class);
     }
-public function favorites()
-{
-    return $this->morphMany(Favorite::class, 'favoritable');
-}
 
-public function histories()
-{
-    return $this->morphMany(History::class, 'historyable');
-}
+    public function favorites()
+    {
+        return $this->morphMany(Favorite::class, 'favoritable');
+    }
 
+    public function histories()
+    {
+        return $this->morphMany(History::class, 'historyable');
+    }
+
+    // ============================================================
+    // ACCESSORS
+    // ============================================================
+
+    public function getImageUrlAttribute()
+    {
+        return $this->getFullImageUrl($this->image);
+    }
+
+    public function getFormattedPhoneAttribute()
+    {
+        return $this->formatPhoneNumber($this->phone);
+    }
+
+    // ============================================================
+    // MÉTODOS PRIVADOS
+    // ============================================================
+
+    private function formatPhoneNumber($phone)
+    {
+        if (!$phone) return null;
+        
+        $cleaned = preg_replace('/[^0-9]/', '', $phone);
+        
+        if (strlen($cleaned) === 9) {
+            return substr($cleaned, 0, 3) . ' ' . substr($cleaned, 3, 3) . ' ' . substr($cleaned, 6);
+        }
+        
+        if (strlen($cleaned) === 8) {
+            return substr($cleaned, 0, 2) . ' ' . substr($cleaned, 2, 3) . ' ' . substr($cleaned, 5);
+        }
+        
+        if (strlen($cleaned) >= 10) {
+            $countryCode = substr($cleaned, 0, strlen($cleaned) - 9);
+            $number = substr($cleaned, -9);
+            return '+' . $countryCode . ' ' . substr($number, 0, 3) . ' ' . substr($number, 3, 3) . ' ' . substr($number, 6);
+        }
+        
+        return $phone;
+    }
+
+    // ============================================================
+    // MÉTODOS HELPER PARA IMÁGENES
+    // ============================================================
+
+    public function hasImage(): bool
+    {
+        return !is_null($this->image);
+    }
+
+    public function uploadImage($request)
+    {
+        return $this->uploadImageToProduction($request, $this, 'shops', 'image');
+    }
+
+    public function deleteImage()
+    {
+        if ($this->image) {
+            $this->deleteImageFromProduction($this->image);
+            $this->update(['image' => null]);
+            return true;
+        }
+        return false;
+    }
 }

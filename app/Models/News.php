@@ -4,10 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Traits\UploadImage; // ✅ TRAIT PARA IMAGEN
 
 class News extends Model
 {
-    use HasFactory;
+    use HasFactory, UploadImage; // ✅ AGREGADO TRAIT
 
     protected $fillable = [
         'user_id',
@@ -28,6 +29,10 @@ class News extends Model
         'image_url',
     ];
 
+    // ============================================================
+    // RELACIONES
+    // ============================================================
+
     /**
      * Usuario que creó la noticia
      */
@@ -38,14 +43,7 @@ class News extends Model
 
     /**
      * Perfil asociado a la noticia.
-     *
-     * Puede ser:
-     * Doctor
-     * Lawyer
-     * Shop
-     * Association
-     *
-     * También puede ser NULL.
+     * Puede ser: Doctor, Lawyer, Shop, Association o NULL
      */
     public function newable()
     {
@@ -84,19 +82,39 @@ class News extends Model
         return $this->morphMany(History::class, 'historyable');
     }
 
+    // ============================================================
+    // ACCESSORS
+    // ============================================================
+
     /**
      * URL pública de la imagen
      */
     public function getImageUrlAttribute()
     {
-        if (!$this->image) {
-            return null;
-        }
+        return $this->getFullImageUrl($this->image);
+    }
 
-        if (filter_var($this->image, FILTER_VALIDATE_URL)) {
-            return $this->image;
-        }
+    // ============================================================
+    // MÉTODOS HELPER PARA IMÁGENES
+    // ============================================================
 
-        return asset('storage/' . ltrim($this->image, '/'));
+    public function hasImage(): bool
+    {
+        return !is_null($this->image);
+    }
+
+    public function uploadImage($request)
+    {
+        return $this->uploadImageToProduction($request, $this, 'news', 'image');
+    }
+
+    public function deleteImage()
+    {
+        if ($this->image) {
+            $this->deleteImageFromProduction($this->image);
+            $this->update(['image' => null]);
+            return true;
+        }
+        return false;
     }
 }

@@ -6,11 +6,12 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Traits\BelongsToUser;
 use App\Models\Traits\HasServices;
+use App\Models\Traits\UploadImage; // ✅ TRAIT PARA IMAGEN
 use Illuminate\Support\Facades\Config;
 
 class Doctor extends Model
 {
-    use HasFactory, BelongsToUser, HasServices;
+    use HasFactory, BelongsToUser, HasServices, UploadImage; // ✅ AGREGADO TRAIT
 
     protected $fillable = [
         'user_id',
@@ -29,6 +30,7 @@ class Doctor extends Model
         'phone',
         'emergency_phone',
         'clinic_phone',
+        'sexo',
     ];
 
     protected $casts = [
@@ -36,7 +38,18 @@ class Doctor extends Model
         'rating'   => 'float',
     ];
 
-    // Relaciones
+    protected $appends = [
+        'image_url',
+        'formatted_phone',
+        'formatted_emergency_phone',
+        'formatted_clinic_phone',
+        'full_name',
+    ];
+
+    // ============================================================
+    // RELACIONES
+    // ============================================================
+
     public function user()
     {
         return $this->belongsTo(User::class);
@@ -77,32 +90,20 @@ class Doctor extends Model
         return $this->morphMany(History::class, 'historyable');
     }
 
-    // Accessors
-    protected $appends = ['image_url', 'formatted_phone', 'formatted_emergency_phone', 'formatted_clinic_phone'];
+    // ============================================================
+    // ACCESSORS
+    // ============================================================
+
+    public function getFullNameAttribute()
+    {
+        return $this->first_name . ' ' . $this->last_name;
+    }
 
     public function getImageUrlAttribute()
     {
-        if (!$this->image) {
-            return null;
-        }
-
-        // ✅ LA IMAGEN YA ES UNA URL COMPLETA (guardada por el trait UploadImage)
-        // Solo verificar si es una URL válida, si no, construirla
-        if (filter_var($this->image, FILTER_VALIDATE_URL)) {
-            return $this->image;
-        }
-
-        // Si por algún motivo no es URL completa, construirla
-        $isDevelopment = Config::get('app.env') === 'local' || Config::get('app.env') === 'development';
-        
-        if ($isDevelopment) {
-            return 'http://192.168.203.82:8000/imagenes_app/doctors/' . $this->image;
-        }
-        
-        return 'https://apiapk.tudealer.app/imagenes_app/doctors/' . $this->image;
+        return $this->getFullImageUrl($this->image);
     }
 
-    // Formatear teléfonos
     public function getFormattedPhoneAttribute()
     {
         return $this->formatPhoneNumber($this->phone);
@@ -118,15 +119,16 @@ class Doctor extends Model
         return $this->formatPhoneNumber($this->clinic_phone);
     }
 
-    // Método privado para formatear números de teléfono
+    // ============================================================
+    // MÉTODOS PRIVADOS
+    // ============================================================
+
     private function formatPhoneNumber($phone)
     {
         if (!$phone) return null;
         
-        // Limpiar el número: solo dígitos
         $cleaned = preg_replace('/[^0-9]/', '', $phone);
         
-        // Formato para Perú
         if (strlen($cleaned) === 9) {
             return substr($cleaned, 0, 3) . ' ' . substr($cleaned, 3, 3) . ' ' . substr($cleaned, 6);
         }
@@ -135,15 +137,48 @@ class Doctor extends Model
             return substr($cleaned, 0, 2) . ' ' . substr($cleaned, 2, 3) . ' ' . substr($cleaned, 5);
         }
         
+        if (strlen($cleaned) >= 10) {
+            $countryCode = substr($cleaned, 0, strlen($cleaned) - 9);
+            $number = substr($cleaned, -9);
+            return '+' . $countryCode . ' ' . substr($number, 0, 3) . ' ' . substr($number, 3, 3) . ' ' . substr($number, 6);
+        }
+        
         return $phone;
     }
 
-    // Scopes
+    // ============================================================
+    // SCOPES
+    // ============================================================
+
     public function scopeWithPhone($query, $phone)
     {
         $cleaned = preg_replace('/[^0-9]/', '', $phone);
         return $query->where('phone', 'LIKE', "%{$cleaned}%")
                      ->orWhere('emergency_phone', 'LIKE', "%{$cleaned}%")
                      ->orWhere('clinic_phone', 'LIKE', "%{$cleaned}%");
+    }
+
+    // ============================================================
+    // MÉTODOS HELPER PARA IMÁGENES
+    // ============================================================
+
+    public function hasImage(): bool
+    {
+        return !is_null($this->image);
+    }
+
+    public function uploadImage($request)
+    {
+        return $this->uploadImageToProduction($request, $this, 'doctors', 'image');
+    }
+
+    public function deleteImage()
+    {
+        if ($this->image) {
+            $this->deleteImageFromProduction($this->image);
+            $this->update(['image' => null]);
+            return true;
+        }
+        return false;
     }
 }

@@ -6,11 +6,11 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Traits\BelongsToUser;
 use App\Models\Traits\HasProducts;
-use App\Models\Traits\UploadImage; // ✅ AGREGAR TRAIT
+use App\Models\Traits\UploadImage; // ✅ TRAIT PARA IMAGEN
 
 class Association extends Model
 {
-    use HasFactory, BelongsToUser, HasProducts, UploadImage; // ✅ AGREGAR TRAIT
+    use HasFactory, BelongsToUser, HasProducts, UploadImage; // ✅ AGREGADO TRAIT
 
     protected $fillable = [
         'user_id',
@@ -21,40 +21,18 @@ class Association extends Model
         'phone',
         'image',
         'website',
+        'ruc',
+        'sexo',
     ];
 
-    protected $appends = ['image_url'];
+    protected $appends = [
+        'image_url',
+        'formatted_phone',
+    ];
 
-    // ✅ CORREGIDO: Manejar URLs completas
-    public function getImageUrlAttribute()
-    {
-        if (!$this->image) {
-            return null;
-        }
-
-        // Si ya es una URL completa (http o https), devolver tal cual
-        if (filter_var($this->image, FILTER_VALIDATE_URL)) {
-            return $this->image;
-        }
-
-        // Si es una ruta relativa, construir la URL completa
-        return asset('storage/' . ltrim($this->image, '/'));
-    }
-
-    // ✅ AGREGAR MÉTODO PARA SUBIR IMAGEN USANDO EL TRAIT
-    public function uploadImage(Request $request)
-    {
-        return $this->uploadImageToProduction($request, $this, 'associations');
-    }
-
-    // ✅ AGREGAR MÉTODO PARA ELIMINAR IMAGEN
-    public function deleteImage()
-    {
-        if ($this->image) {
-            $this->deleteImageFromProduction($this->image);
-            $this->update(['image' => null]);
-        }
-    }
+    // ============================================================
+    // RELACIONES
+    // ============================================================
 
     public function user()
     {
@@ -76,7 +54,6 @@ class Association extends Model
         return $this->morphMany(News::class, 'newable');
     }
 
-    // 🔥 Renombrada para evitar choque con atributo "services"
     public function services()
     {
         return $this->morphMany(Service::class, 'serviceable');
@@ -95,5 +72,70 @@ class Association extends Model
     public function histories()
     {
         return $this->morphMany(History::class, 'historyable');
+    }
+
+    // ============================================================
+    // ACCESSORS
+    // ============================================================
+
+    public function getImageUrlAttribute()
+    {
+        return $this->getFullImageUrl($this->image);
+    }
+
+    public function getFormattedPhoneAttribute()
+    {
+        return $this->formatPhoneNumber($this->phone);
+    }
+
+    // ============================================================
+    // MÉTODOS PRIVADOS
+    // ============================================================
+
+    private function formatPhoneNumber($phone)
+    {
+        if (!$phone) return null;
+        
+        $cleaned = preg_replace('/[^0-9]/', '', $phone);
+        
+        if (strlen($cleaned) === 9) {
+            return substr($cleaned, 0, 3) . ' ' . substr($cleaned, 3, 3) . ' ' . substr($cleaned, 6);
+        }
+        
+        if (strlen($cleaned) === 8) {
+            return substr($cleaned, 0, 2) . ' ' . substr($cleaned, 2, 3) . ' ' . substr($cleaned, 5);
+        }
+        
+        if (strlen($cleaned) >= 10) {
+            $countryCode = substr($cleaned, 0, strlen($cleaned) - 9);
+            $number = substr($cleaned, -9);
+            return '+' . $countryCode . ' ' . substr($number, 0, 3) . ' ' . substr($number, 3, 3) . ' ' . substr($number, 6);
+        }
+        
+        return $phone;
+    }
+
+    // ============================================================
+    // MÉTODOS HELPER PARA IMÁGENES
+    // ============================================================
+
+    public function hasImage(): bool
+    {
+        return !is_null($this->image);
+    }
+
+    public function uploadImage($request)
+    {
+        return $this->uploadImageToProduction($request, $this, 'associations', 'image');
+    }
+
+    public function deleteImage()
+    {
+        if ($this->image) {
+            $this->deleteImageFromProduction($this->image);
+            $this->update(['image' => null]);
+            return true;
+        }
+        return false;
     }
 }

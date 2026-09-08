@@ -7,10 +7,11 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Spatie\Permission\Traits\HasRoles;
 use Tymon\JWTAuth\Contracts\JWTSubject;
+use App\Models\Traits\UploadAvatar; // ✅ TRAIT PARA AVATAR
 
 class User extends Authenticatable implements JWTSubject
 {
-    use Notifiable, HasRoles, HasFactory;
+    use Notifiable, HasRoles, HasFactory, UploadAvatar; // ✅ AGREGADO UploadAvatar
 
     protected $guard_name = 'api';
 
@@ -23,6 +24,8 @@ class User extends Authenticatable implements JWTSubject
         'dni',
         'address',
         'city',
+        'sexo',
+        'current_token',
     ];
 
     protected $hidden = [
@@ -36,6 +39,7 @@ class User extends Authenticatable implements JWTSubject
         'formatted_phone',
         'profile_type',
         'profile_data',
+        'sexo_label',
     ];
 
     protected function casts(): array
@@ -180,6 +184,19 @@ class User extends Authenticatable implements JWTSubject
         return null;
     }
 
+    public function getSexoLabelAttribute()
+    {
+        $labels = [
+            'masculino' => 'Masculino',
+            'femenino' => 'Femenino',
+            'lgbt' => 'LGBT+',
+            'otro' => 'Otro',
+            'no_especificado' => 'No especificado',
+        ];
+        
+        return $labels[$this->sexo] ?? 'No especificado';
+    }
+
     private function formatPhoneNumber($phone)
     {
         if (!$phone) return null;
@@ -317,5 +334,20 @@ class User extends Authenticatable implements JWTSubject
         }
 
         return $this->address;
+    }
+
+    public function getProfileSexo(): ?string
+    {
+        $profile = $this->profile_data;
+        
+        if (!$profile) {
+            return $this->sexo;
+        }
+
+        if (isset($profile->sexo) && $profile->sexo) {
+            return $profile->sexo;
+        }
+
+        return $this->sexo;
     }
 }
