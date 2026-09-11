@@ -6,12 +6,13 @@ use App\Http\Controllers\Controller;
 use App\Models\Product;
 use App\Models\Traits\UploadImage;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Exception;
 
 class ProductController extends Controller
 {
-    use UploadImage;
+    use UploadImage; // ✅ USAR EL TRAIT
 
     /** 
      * GET /api/products
@@ -29,7 +30,7 @@ class ProductController extends Controller
 
     /**
      * POST /api/products
-     * Crear un nuevo producto
+     * Crear un nuevo producto - CORREGIDO (USANDO TRAIT)
      */
     public function store(Request $request)
     {
@@ -44,22 +45,6 @@ class ProductController extends Controller
                 'association_id' => 'nullable|integer',
             ]);
 
-            $imageUrl = null;
-
-            // 🔥 SUBIR IMAGEN usando el método del trait
-            if ($request->hasFile('image')) {
-                $file = $request->file('image');
-                $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
-                $destinationPath = '/home1/icjmeomy/apiapk.tudealer.app/public/imagenes_app/productos';
-                
-                if (!file_exists($destinationPath)) {
-                    mkdir($destinationPath, 0755, true);
-                }
-                
-                $file->move($destinationPath, $filename);
-                $imageUrl = 'https://apiapk.tudealer.app/imagenes_app/productos/' . $filename;
-            }
-
             // Detectar dueño del producto
             if ($request->store_id) {
                 $productableType = 'App\Models\Shop';
@@ -73,6 +58,7 @@ class ProductController extends Controller
                 ], 422);
             }
 
+            // ✅ CREAR PRODUCTO PRIMERO (sin imagen)
             $product = Product::create([
                 'productable_type' => $productableType,
                 'productable_id'   => $productableId,
@@ -80,8 +66,21 @@ class ProductController extends Controller
                 'description'      => $request->description,
                 'price'            => $request->price,
                 'stock'            => $request->stock,
-                'image'            => $imageUrl,
             ]);
+
+            // ✅ SUBIR IMAGEN USANDO EL TRAIT (AUTOMÁTICO EN DESARROLLO Y PRODUCCIÓN)
+            if ($request->hasFile('image')) {
+                $result = $this->uploadImageToProduction($request, $product, 'productos', 'image');
+                
+                if ($result instanceof \Illuminate\Http\JsonResponse) {
+                    $data = $result->getData();
+                    if (!$data->success) {
+                        return $result;
+                    }
+                }
+            }
+
+            $product->load(['productable.user', 'comments.user']);
 
             return response()->json([
                 'message' => 'Producto creado correctamente',
@@ -113,132 +112,122 @@ class ProductController extends Controller
 
     /**
      * PUT /api/products/{id}
-     * Actualizar un producto
+     * Actualizar un producto - CORREGIDO (USANDO TRAIT)
      */
-public function update(Request $request, $id)
-{
-    try {
-        $product = Product::findOrFail($id);
+    public function update(Request $request, $id)
+    {
+        try {
+            $product = Product::findOrFail($id);
 
-        // ✅ VERIFICACIÓN DE PERMISOS
-        $user = Auth::user();
-        $isAdmin = $user->hasRole('admin');
-        
-        // Obtener el dueño del producto (tienda o asociación)
-        $isOwner = false;
-        if ($product->productable) {
-            // Verificar si el usuario es dueño del perfil (shop o association)
-            if (isset($product->productable->user_id)) {
-                $isOwner = $product->productable->user_id === $user->id;
+            // ✅ VERIFICACIÓN DE PERMISOS
+            $user = Auth::user();
+            $isAdmin = $user->hasRole('admin');
+            
+            $isOwner = false;
+            if ($product->productable) {
+                if (isset($product->productable->user_id)) {
+                    $isOwner = $product->productable->user_id === $user->id;
+                }
             }
-        }
 
-        if (!$isOwner && !$isAdmin) {
+            if (!$isOwner && !$isAdmin) {
+                return response()->json([
+                    'message' => 'No autorizado para editar este producto'
+                ], 403);
+            }
+
+            $request->validate([
+                'name'        => 'nullable|string|max:255',
+                'description' => 'nullable|string',
+                'price'       => 'nullable|numeric',
+                'stock'       => 'nullable|integer',
+                'image'       => 'nullable|image|mimes:jpg,jpeg,png,webp|max:4096',
+            ]);
+
+            // ✅ ACTUALIZAR DATOS
+            $product->update([
+                'name'        => $request->name ?? $product->name,
+                'description' => $request->description ?? $product->description,
+                'price'       => $request->price ?? $product->price,
+                'stock'       => $request->stock ?? $product->stock,
+            ]);
+
+            // ✅ SUBIR IMAGEN USANDO EL TRAIT
+            if ($request->hasFile('image')) {
+                $result = $this->uploadImageToProduction($request, $product, 'productos', 'image');
+                
+                if ($result instanceof \Illuminate\Http\JsonResponse) {
+                    $data = $result->getData();
+                    if (!$data->success) {
+                        return $result;
+                    }
+                }
+            }
+
+            $product->load(['productable.user', 'comments.user']);
+
             return response()->json([
-                'message' => 'No autorizado para editar este producto'
-            ], 403);
+                'message' => 'Producto actualizado',
+                'data'    => $product
+            ]);
+
+        } catch (Exception $e) {
+            Log::error('Product update error: ' . $e->getMessage());
+            return response()->json([
+                'error'   => 'Error al actualizar producto',
+                'message' => $e->getMessage()
+            ], 500);
         }
-
-        $request->validate([
-            'name'        => 'nullable|string|max:255',
-            'description' => 'nullable|string',
-            'price'       => 'nullable|numeric',
-            'stock'       => 'nullable|integer',
-            'image'       => 'nullable|image|mimes:jpg,jpeg,png,webp|max:4096',
-        ]);
-
-        // Si sube nueva imagen: borrar antigua + guardar nueva
-        if ($request->hasFile('image')) {
-            // Eliminar imagen anterior
-            $this->deleteImageFromProduction($product->image);
-            
-            $file = $request->file('image');
-            $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
-            $destinationPath = '/home1/icjmeomy/apiapk.tudealer.app/public/imagenes_app/productos';
-            
-            if (!file_exists($destinationPath)) {
-                mkdir($destinationPath, 0755, true);
-            }
-            
-            $file->move($destinationPath, $filename);
-            $imageUrl = 'https://apiapk.tudealer.app/imagenes_app/productos/' . $filename;
-            
-            $product->image = $imageUrl;
-        }
-
-        // Si viene imagen como string (base64 o URL)
-        if ($request->has('image') && is_string($request->image)) {
-            $product->image = $request->image;
-        }
-
-        $product->update([
-            'name'        => $request->name ?? $product->name,
-            'description' => $request->description ?? $product->description,
-            'price'       => $request->price ?? $product->price,
-            'stock'       => $request->stock ?? $product->stock,
-        ]);
-
-        return response()->json([
-            'message' => 'Producto actualizado',
-            'data'    => $product
-        ]);
-
-    } catch (Exception $e) {
-        Log::error('Product update error: ' . $e->getMessage());
-        return response()->json([
-            'error'   => 'Error al actualizar producto',
-            'message' => $e->getMessage()
-        ], 500);
     }
-}
+
     /**
      * DELETE /api/products/{id}
-     * Eliminar un producto
+     * Eliminar un producto - CORREGIDO (USANDO TRAIT)
      */
-public function destroy($id)
-{
-    try {
-        $product = Product::findOrFail($id);
+    public function destroy($id)
+    {
+        try {
+            $product = Product::findOrFail($id);
 
-        // ✅ VERIFICACIÓN DE PERMISOS
-        $user = Auth::user();
-        $isAdmin = $user->hasRole('admin');
-        
-        // Obtener el dueño del producto (tienda o asociación)
-        $isOwner = false;
-        if ($product->productable) {
-            if (isset($product->productable->user_id)) {
-                $isOwner = $product->productable->user_id === $user->id;
+            $user = Auth::user();
+            $isAdmin = $user->hasRole('admin');
+            
+            $isOwner = false;
+            if ($product->productable) {
+                if (isset($product->productable->user_id)) {
+                    $isOwner = $product->productable->user_id === $user->id;
+                }
             }
-        }
 
-        if (!$isOwner && !$isAdmin) {
+            if (!$isOwner && !$isAdmin) {
+                return response()->json([
+                    'message' => 'No autorizado para eliminar este producto'
+                ], 403);
+            }
+
+            // ✅ ELIMINAR IMAGEN USANDO EL TRAIT
+            if ($product->image) {
+                $this->deleteImageFromProduction($product->image);
+            }
+
+            $product->delete();
+
             return response()->json([
-                'message' => 'No autorizado para eliminar este producto'
-            ], 403);
+                'message' => 'Producto eliminado correctamente'
+            ]);
+
+        } catch (Exception $e) {
+            Log::error('Product delete error: ' . $e->getMessage());
+            return response()->json([
+                'error'   => 'Error al eliminar producto',
+                'message' => $e->getMessage()
+            ], 500);
         }
-
-        // Eliminar imagen
-        $this->deleteImageFromProduction($product->image);
-
-        $product->delete();
-
-        return response()->json([
-            'message' => 'Producto eliminado correctamente'
-        ]);
-
-    } catch (Exception $e) {
-        Log::error('Product delete error: ' . $e->getMessage());
-        return response()->json([
-            'error'   => 'Error al eliminar producto',
-            'message' => $e->getMessage()
-        ], 500);
     }
-}
 
     /**
      * GET /api/products/latest
-     * Obtener los últimos 5 productos
+     * Obtener los últimos productos
      */
     public function latest()
     {

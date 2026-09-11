@@ -41,7 +41,9 @@ trait UploadImage
                     mkdir($destinationPath, 0755, true);
                 }
                 $file->move($destinationPath, $filename);
-                $baseUrl = env('APP_URL', 'http://192.168.203.82:8000');
+                
+                // ✅ USAR LA IP CORRECTA PARA DESARROLLO (LA QUE USA EL FRONTEND)
+                $baseUrl = 'http://10.23.248.82:8000';
                 $imageUrl = $baseUrl . '/imagenes_app/' . $folder . '/' . $filename;
             } else {
                 // 🌐 PRODUCCIÓN
@@ -50,7 +52,7 @@ trait UploadImage
                     mkdir($destinationPath, 0755, true);
                 }
                 $file->move($destinationPath, $filename);
-                $baseUrl = env('APP_URL', 'https://apiapk.tudealer.app');
+                $baseUrl = 'https://apiapk.tudealer.app';
                 $imageUrl = $baseUrl . '/imagenes_app/' . $folder . '/' . $filename;
             }
             
@@ -66,6 +68,7 @@ trait UploadImage
                 'folder' => $folder,
                 'filename' => $filename,
                 'url' => $imageUrl,
+                'environment' => $isDevelopment ? 'development' : 'production'
             ]);
             
             return response()->json([
@@ -102,12 +105,14 @@ trait UploadImage
             $cleanUrl = explode('?', $imageUrl)[0];
             
             if ($isDevelopment) {
-                $baseUrl = env('APP_URL', 'http://192.168.203.82:8000');
+                // ✅ IP DE DESARROLLO
+                $baseUrl = 'http://10.23.248.82:8000';
                 $relativePath = str_replace($baseUrl, '', $cleanUrl);
                 $relativePath = ltrim($relativePath, '/');
                 $fullPath = public_path($relativePath);
             } else {
-                $baseUrl = env('APP_URL', 'https://apiapk.tudealer.app');
+                // 🌐 PRODUCCIÓN
+                $baseUrl = 'https://apiapk.tudealer.app';
                 $relativePath = str_replace($baseUrl, '', $cleanUrl);
                 $relativePath = ltrim($relativePath, '/');
                 $fullPath = '/home1/icjmeomy/apiapk.tudealer.app/public/' . $relativePath;
@@ -138,8 +143,8 @@ trait UploadImage
         
         $isDevelopment = env('APP_ENV') === 'local' || env('APP_ENV') === 'development';
         $baseUrl = $isDevelopment 
-            ? env('APP_URL', 'http://192.168.203.82:8000')
-            : env('APP_URL', 'https://apiapk.tudealer.app');
+            ? 'http://10.23.248.82:8000'  // ✅ IP CORRECTA
+            : 'https://apiapk.tudealer.app';
         
         return $baseUrl . '/' . ltrim($imagePath, '/');
     }

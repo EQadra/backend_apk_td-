@@ -23,25 +23,21 @@ use App\Http\Controllers\API\HistoryController;
 
 /*
 |--------------------------------------------------------------------------
-| AUTH - Rutas públicas
+| AUTH
 |--------------------------------------------------------------------------
 */
 Route::prefix('auth')->group(function () {
-    // ✅ PÚBLICAS
     Route::post('login', [AuthController::class, 'login']);
     Route::post('register', [AuthController::class, 'register']);
     Route::post('forgot-password', [AuthController::class, 'forgotPassword']);
     Route::post('reset-password', [AuthController::class, 'resetPassword']);
 
-    // ✅ PROTEGIDAS
     Route::middleware('auth:api')->group(function () {
         Route::get('me', [AuthController::class, 'me']);
         Route::post('logout', [AuthController::class, 'logout']);
         Route::post('refresh', [AuthController::class, 'refresh']);
         Route::post('change-password', [AuthController::class, 'changePassword']);
         Route::put('profile', [AuthController::class, 'updateProfile']);
-        
-        // ✅ AVATAR - RUTAS CORREGIDAS
         Route::post('update-avatar', [AuthController::class, 'updateAvatar']);
         Route::delete('delete-avatar', [AuthController::class, 'deleteAvatar']);
     });
@@ -49,18 +45,20 @@ Route::prefix('auth')->group(function () {
 
 /*
 |--------------------------------------------------------------------------
-| 🔥 RUTAS PÚBLICAS (NO REQUIEREN AUTENTICACIÓN)
+| 🔥 RUTAS PÚBLICAS (LECTURA - SIN TOKEN)
 |--------------------------------------------------------------------------
 */
 
-// 🔥 BÚSQUEDAS - PÚBLICAS
+// BÚSQUEDAS
 Route::get('lawyers/search', [LawyerController::class, 'search']);
 Route::get('doctors/search', [DoctorController::class, 'search']);
 Route::get('associations/search', [AssociationController::class, 'search']);
 Route::get('shops/search', [ShopController::class, 'search']);
 Route::get('news/search', [NewsController::class, 'search']);
+Route::get('services/search', [ServiceController::class, 'search']);
+Route::get('products/search', [ProductController::class, 'search']);
 
-// 🔥 ÚLTIMOS (LATEST) - PÚBLICOS
+// LATEST
 Route::get('associations/latest', [AssociationController::class, 'latest']);
 Route::get('doctors/latest', [DoctorController::class, 'latest']);
 Route::get('lawyers/latest', [LawyerController::class, 'latest']);
@@ -68,12 +66,19 @@ Route::get('shops/latest', [ShopController::class, 'latest']);
 Route::get('products/latest', [ProductController::class, 'latest']);
 Route::get('services/latest', [ServiceController::class, 'latest']);
 Route::get('news/latest', [NewsController::class, 'latest']);
+Route::get('feedbacks/latest', [FeedbackController::class, 'latest']);
 
-// 🔥 BY SPECIALTY - PÚBLICOS
+// HOME
+Route::get('services/home', [ServiceController::class, 'home']);
+Route::get('feedbacks/home', [FeedbackController::class, 'home']);
+Route::get('news/home', [NewsController::class, 'home']);
+Route::get('posts/home', [PostController::class, 'home']);
+
+// BY SPECIALTY
 Route::get('doctors/specialty/{specialty}', [DoctorController::class, 'bySpecialty']);
 Route::get('lawyers/specialty/{specialty}', [LawyerController::class, 'bySpecialty']);
 
-// 🔥 NEWS - PÚBLICOS
+// NEWS - LECTURA
 Route::prefix('news')->group(function () {
     Route::get('/', [NewsController::class, 'index']);
     Route::get('latest', [NewsController::class, 'latest']);
@@ -81,7 +86,7 @@ Route::prefix('news')->group(function () {
     Route::get('{id}', [NewsController::class, 'show']);
 });
 
-// 🔥 POSTS - PÚBLICOS (lectura)
+// POSTS - LECTURA
 Route::prefix('posts')->group(function () {
     Route::get('/', [PostController::class, 'index']);
     Route::get('/home', [PostController::class, 'home']);
@@ -91,18 +96,71 @@ Route::prefix('posts')->group(function () {
     Route::get('/{id}/comments', [CommentController::class, 'getPostComments']);
 });
 
+// SERVICES - LECTURA
+Route::prefix('services')->group(function () {
+    Route::get('/', [ServiceController::class, 'index']);
+    Route::get('home', [ServiceController::class, 'home']);
+    Route::get('latest', [ServiceController::class, 'latest']);
+    Route::get('{id}', [ServiceController::class, 'show']);
+    Route::get('{serviceId}/comments', [CommentController::class, 'getServiceComments']);
+});
+
+// FEEDBACKS - LECTURA
+Route::prefix('feedbacks')->group(function () {
+    Route::get('/', [FeedbackController::class, 'index']);
+    Route::get('home', [FeedbackController::class, 'home']);
+    Route::get('latest', [FeedbackController::class, 'latest']);
+    Route::get('{id}', [FeedbackController::class, 'show']);
+});
+
+// PRODUCTS - LECTURA
+Route::prefix('products')->group(function () {
+    Route::get('/', [ProductController::class, 'index']);
+    Route::get('latest', [ProductController::class, 'latest']);
+    Route::get('{id}', [ProductController::class, 'show']);
+    Route::get('{productId}/comments', [CommentController::class, 'getProductComments']);
+});
+
+// SHOP - LECTURA
+Route::prefix('shops')->group(function () {
+    Route::get('/', [ShopController::class, 'index']);
+    Route::get('latest', [ShopController::class, 'latest']);
+    Route::get('{id}', [ShopController::class, 'show']);
+});
+
+// DOCTORS - LECTURA
+Route::prefix('doctors')->group(function () {
+    Route::get('/', [DoctorController::class, 'index']);
+    Route::get('latest', [DoctorController::class, 'latest']);
+    Route::get('{id}', [DoctorController::class, 'show']);
+});
+
+// LAWYERS - LECTURA
+Route::prefix('lawyers')->group(function () {
+    Route::get('/', [LawyerController::class, 'index']);
+    Route::get('latest', [LawyerController::class, 'latest']);
+    Route::get('{id}', [LawyerController::class, 'show']);
+});
+
+// ASSOCIATIONS - LECTURA
+Route::prefix('associations')->group(function () {
+    Route::get('/', [AssociationController::class, 'index']);
+    Route::get('latest', [AssociationController::class, 'latest']);
+    Route::get('{id}', [AssociationController::class, 'show']);
+});
+
 /*
 |--------------------------------------------------------------------------
-| RUTAS PROTEGIDAS (REQUIEREN AUTENTICACIÓN)
+| 🔒 RUTAS PROTEGIDAS (ESCRITURA Y DATOS DEL USUARIO)
 |--------------------------------------------------------------------------
 */
 
 Route::middleware('auth:api')->group(function () {
 
     /*
-    |--------------------------------------------------------------------------
+    |----------------------------------------------------------------------
     | USERS
-    |--------------------------------------------------------------------------
+    |----------------------------------------------------------------------
     */
     Route::apiResource('users', UserController::class);
 
@@ -117,9 +175,9 @@ Route::middleware('auth:api')->group(function () {
     });
 
     /*
-    |--------------------------------------------------------------------------
+    |----------------------------------------------------------------------
     | ADMIN
-    |--------------------------------------------------------------------------
+    |----------------------------------------------------------------------
     */
     Route::middleware('role:admin')->group(function () {
         Route::apiResource('roles', RoleController::class)->only(['index', 'store']);
@@ -133,11 +191,6 @@ Route::middleware('auth:api')->group(function () {
         });
     });
 
-    /*
-    |--------------------------------------------------------------------------
-    | DASHBOARD
-    |--------------------------------------------------------------------------
-    */
     Route::middleware('role:admin')->get('admin/dashboard', fn () =>
         response()->json(['message' => 'Welcome Admin'])
     );
@@ -147,9 +200,9 @@ Route::middleware('auth:api')->group(function () {
     );
 
     /*
-    |--------------------------------------------------------------------------
-    | CUSTOM ROUTES - ME (PROTEGIDAS)
-    |--------------------------------------------------------------------------
+    |----------------------------------------------------------------------
+    | ME - Perfil del usuario
+    |----------------------------------------------------------------------
     */
     Route::get('associations/me', [AssociationController::class, 'me']);
     Route::get('doctors/me', [DoctorController::class, 'me']);
@@ -157,134 +210,130 @@ Route::middleware('auth:api')->group(function () {
     Route::get('shops/me', [ShopController::class, 'me']);
 
     /*
-    |--------------------------------------------------------------------------
-    | RESOURCES (PROTEGIDAS)
-    |--------------------------------------------------------------------------
+    |----------------------------------------------------------------------
+    | ESCRITURA - DOCTORS
+    |----------------------------------------------------------------------
     */
-    Route::apiResource('associations', AssociationController::class);
-    Route::apiResource('doctors', DoctorController::class);
-    Route::apiResource('lawyers', LawyerController::class);
-    Route::apiResource('products', ProductController::class);
-    Route::apiResource('services', ServiceController::class);
-    Route::apiResource('shops', ShopController::class);
+    Route::post('doctors', [DoctorController::class, 'store']);
+    Route::put('doctors/{id}', [DoctorController::class, 'update']);
+    Route::delete('doctors/{id}', [DoctorController::class, 'destroy']);
+    Route::post('doctors/update-image', [DoctorController::class, 'updateImage']);
+    Route::get('doctors/image', [DoctorController::class, 'getImage']);
 
     /*
-    |--------------------------------------------------------------------------
-    | ACTUALIZACIÓN DE IMÁGENES - 🔥 RUTAS CORRECTAS
-    |--------------------------------------------------------------------------
+    |----------------------------------------------------------------------
+    | ESCRITURA - LAWYERS
+    |----------------------------------------------------------------------
     */
-    // ✅ DOCTOR
-    Route::post('/doctors/update-image', [DoctorController::class, 'updateImage']);
-    Route::get('/doctors/image', [DoctorController::class, 'getImage']);
-    
-    // ✅ LAWYER
-    Route::post('/lawyers/update-image', [LawyerController::class, 'updateImage']);
-    
-    // ✅ ASSOCIATION
-    Route::post('/associations/update-image', [AssociationController::class, 'updateImage']);
-    
-    // ✅ SHOP
-    Route::post('/shops/update-image', [ShopController::class, 'updateImage']);
+    Route::post('lawyers', [LawyerController::class, 'store']);
+    Route::put('lawyers/{id}', [LawyerController::class, 'update']);
+    Route::delete('lawyers/{id}', [LawyerController::class, 'destroy']);
+    Route::post('lawyers/update-image', [LawyerController::class, 'updateImage']);
 
     /*
-    |--------------------------------------------------------------------------
-    | NEWS ROUTES (PROTEGIDAS - GESTIÓN)
-    |--------------------------------------------------------------------------
+    |----------------------------------------------------------------------
+    | ESCRITURA - ASSOCIATIONS
+    |----------------------------------------------------------------------
+    */
+    Route::post('associations', [AssociationController::class, 'store']);
+    Route::put('associations/{id}', [AssociationController::class, 'update']);
+    Route::delete('associations/{id}', [AssociationController::class, 'destroy']);
+    Route::post('associations/update-image', [AssociationController::class, 'updateImage']);
+
+    /*
+    |----------------------------------------------------------------------
+    | ESCRITURA - SHOPS
+    |----------------------------------------------------------------------
+    */
+    Route::post('shops', [ShopController::class, 'store']);
+    Route::put('shops/{id}', [ShopController::class, 'update']);
+    Route::delete('shops/{id}', [ShopController::class, 'destroy']);
+    Route::post('shops/update-image', [ShopController::class, 'updateImage']);
+
+    /*
+    |----------------------------------------------------------------------
+    | ESCRITURA - SERVICES
+    |----------------------------------------------------------------------
+    */
+    Route::post('services', [ServiceController::class, 'store']);
+    Route::put('services/{id}', [ServiceController::class, 'update']);
+    Route::delete('services/{id}', [ServiceController::class, 'destroy']);
+    Route::post('services/{id}/image', [ServiceController::class, 'updateImage']);
+    Route::delete('services/{id}/image', [ServiceController::class, 'deleteImage']);
+    Route::post('services/{serviceId}/comments', [CommentController::class, 'storeServiceComment']);
+    Route::delete('service-comments/{id}', [CommentController::class, 'deleteServiceComment']);
+
+    /*
+    |----------------------------------------------------------------------
+    | ESCRITURA - PRODUCTS
+    |----------------------------------------------------------------------
+    */
+    Route::post('products', [ProductController::class, 'store']);
+    Route::put('products/{id}', [ProductController::class, 'update']);
+    Route::delete('products/{id}', [ProductController::class, 'destroy']);
+    Route::post('products/{productId}/comments', [CommentController::class, 'storeProductComment']);
+    Route::delete('product-comments/{id}', [CommentController::class, 'deleteProductComment']);
+
+    /*
+    |----------------------------------------------------------------------
+    | ESCRITURA - FEEDBACKS
+    |----------------------------------------------------------------------
+    */
+    Route::post('feedbacks', [FeedbackController::class, 'store']);
+    Route::delete('feedbacks/{id}', [FeedbackController::class, 'destroy']);
+
+    /*
+    |----------------------------------------------------------------------
+    | ESCRITURA - NEWS
+    |----------------------------------------------------------------------
     */
     Route::prefix('news')->group(function () {
-        // Rutas de gestión (protegidas)
         Route::post('/', [NewsController::class, 'store']);
         Route::put('{id}', [NewsController::class, 'update']);
         Route::delete('{id}', [NewsController::class, 'destroy']);
-        
-        // Rutas de usuario
+
         Route::get('my/latest', [NewsController::class, 'myLatestNews']);
         Route::get('my/all', [NewsController::class, 'myAllNews']);
         Route::get('my/liked', [NewsController::class, 'myLikedNews']);
-        
-        // Comentarios
+
         Route::post('{id}/comments', [NewsController::class, 'addComment']);
-        
-        // Likes
         Route::post('{id}/like', [NewsController::class, 'toggleLike']);
         Route::get('{id}/check-like', [NewsController::class, 'checkLike']);
-        
-        // Depuración (solo admin)
+
         Route::middleware('role:admin')->get('debug/{userId}', [NewsController::class, 'debugUserNews']);
     });
 
     /*
-    |--------------------------------------------------------------------------
-    | COMMENTS
-    |--------------------------------------------------------------------------
-    */
-    Route::apiResource('comments', CommentController::class)->only(['index', 'store', 'show', 'destroy']);
-
-    /*
-    |--------------------------------------------------------------------------
-    | FEEDBACKS
-    |--------------------------------------------------------------------------
-    */
-    Route::apiResource('feedbacks', FeedbackController::class)->only(['index', 'store', 'show', 'destroy']);
-
-    /*
-    |--------------------------------------------------------------------------
-    | POSTS ROUTES - PROTEGIDAS (gestión)
-    |--------------------------------------------------------------------------
+    |----------------------------------------------------------------------
+    | ESCRITURA - POSTS
+    |----------------------------------------------------------------------
     */
     Route::prefix('posts')->group(function () {
-        // 📝 CRUD
         Route::post('/', [PostController::class, 'store']);
         Route::put('{id}', [PostController::class, 'update']);
         Route::delete('{id}', [PostController::class, 'destroy']);
-        
-        // 🖼️ IMAGEN
+
         Route::post('{id}/image', [PostController::class, 'updateImage']);
-        
-        // 👤 MIS POSTS
         Route::get('my/latest', [PostController::class, 'myLatestPosts']);
-        
-        // 💬 COMENTARIOS
+
         Route::post('{id}/comments', [PostController::class, 'addComment']);
         Route::delete('comments/{id}', [PostController::class, 'deleteComment']);
-        
-        // ❤️ LIKES
+
         Route::post('{id}/like', [PostController::class, 'toggleLike']);
     });
 
     /*
-    |--------------------------------------------------------------------------
-    | PRODUCTS ROUTES - COMENTARIOS
-    |--------------------------------------------------------------------------
+    |----------------------------------------------------------------------
+    | ESCRITURA - COMMENTS
+    |----------------------------------------------------------------------
     */
-    Route::prefix('products')->group(function () {
-        Route::get('{productId}/comments', [CommentController::class, 'getProductComments']);
-        Route::post('{productId}/comments', [CommentController::class, 'storeProductComment']);
-    });
-
-    Route::delete('product-comments/{id}', [CommentController::class, 'deleteProductComment']);
+    Route::post('comments', [CommentController::class, 'store']);
+    Route::delete('comments/{id}', [CommentController::class, 'destroy']);
 
     /*
-    |--------------------------------------------------------------------------
-    | SERVICES ROUTES - COMENTARIOS E IMÁGENES
-    |--------------------------------------------------------------------------
-    */
-    Route::prefix('services')->group(function () {
-        // ✅ IMÁGENES
-        Route::post('{id}/image', [ServiceController::class, 'updateImage']);
-        Route::delete('{id}/image', [ServiceController::class, 'deleteImage']);
-        
-        // Comentarios
-        Route::get('{serviceId}/comments', [CommentController::class, 'getServiceComments']);
-        Route::post('{serviceId}/comments', [CommentController::class, 'storeServiceComment']);
-    });
-
-    Route::delete('service-comments/{id}', [CommentController::class, 'deleteServiceComment']);
-
-    /*
-    |--------------------------------------------------------------------------
+    |----------------------------------------------------------------------
     | FAVORITES
-    |--------------------------------------------------------------------------
+    |----------------------------------------------------------------------
     */
     Route::prefix('favorites')->group(function () {
         Route::post('toggle', [FavoriteController::class, 'toggle']);
@@ -294,9 +343,9 @@ Route::middleware('auth:api')->group(function () {
     });
 
     /*
-    |--------------------------------------------------------------------------
+    |----------------------------------------------------------------------
     | HISTORY
-    |--------------------------------------------------------------------------
+    |----------------------------------------------------------------------
     */
     Route::prefix('history')->group(function () {
         Route::post('store', [HistoryController::class, 'store']);
@@ -307,9 +356,9 @@ Route::middleware('auth:api')->group(function () {
     });
 
     /*
-    |--------------------------------------------------------------------------
-    | LATEST POSTS Y SERVICES (mis publicaciones)
-    |--------------------------------------------------------------------------
+    |----------------------------------------------------------------------
+    | MIS PUBLICACIONES
+    |----------------------------------------------------------------------
     */
     Route::get('my-posts/latestPosts', [PostController::class, 'myLatestPosts']);
     Route::get('my-services/latestServices', [ServiceController::class, 'myLatestServices']);
@@ -317,7 +366,7 @@ Route::middleware('auth:api')->group(function () {
 
 /*
 |--------------------------------------------------------------------------
-| TEST 
+| TEST
 |--------------------------------------------------------------------------
 */
 Route::get('/test', function () {

@@ -4,11 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Models\Traits\UploadImage; // ✅ TRAIT PARA IMAGEN
+use App\Models\Traits\UploadImage;
 
 class News extends Model
 {
-    use HasFactory, UploadImage; // ✅ AGREGADO TRAIT
+    use HasFactory, UploadImage;
 
     protected $fillable = [
         'user_id',
@@ -27,56 +27,38 @@ class News extends Model
 
     protected $appends = [
         'image_url',
+        'short_descripcion',
     ];
 
     // ============================================================
     // RELACIONES
     // ============================================================
 
-    /**
-     * Usuario que creó la noticia
-     */
     public function user()
     {
         return $this->belongsTo(User::class);
     }
 
-    /**
-     * Perfil asociado a la noticia.
-     * Puede ser: Doctor, Lawyer, Shop, Association o NULL
-     */
     public function newable()
     {
         return $this->morphTo();
     }
 
-    /**
-     * Comentarios de la noticia
-     */
     public function comments()
     {
         return $this->morphMany(Comment::class, 'commentable');
     }
 
-    /**
-     * Likes de la noticia
-     */
     public function likes()
     {
         return $this->morphMany(Like::class, 'likeable');
     }
 
-    /**
-     * Favoritos
-     */
     public function favorites()
     {
         return $this->morphMany(Favorite::class, 'favoritable');
     }
 
-    /**
-     * Historial
-     */
     public function histories()
     {
         return $this->morphMany(History::class, 'historyable');
@@ -86,12 +68,17 @@ class News extends Model
     // ACCESSORS
     // ============================================================
 
-    /**
-     * URL pública de la imagen
-     */
     public function getImageUrlAttribute()
     {
         return $this->getFullImageUrl($this->image);
+    }
+
+    public function getShortDescripcionAttribute()
+    {
+        if (!$this->descripcion) return null;
+        return strlen($this->descripcion) > 150
+            ? substr($this->descripcion, 0, 150) . '...'
+            : $this->descripcion;
     }
 
     // ============================================================
@@ -116,5 +103,30 @@ class News extends Model
             return true;
         }
         return false;
+    }
+
+    // ============================================================
+    // SCOPES
+    // ============================================================
+
+    public function scopeLatestForHome($query, $limit = 6)
+    {
+        return $query->latest('created_at')->take($limit);
+    }
+
+    public function scopeByType($query, $type)
+    {
+        $typeMap = [
+            'doctor' => 'App\\Models\\Doctor',
+            'lawyer' => 'App\\Models\\Lawyer',
+            'shop' => 'App\\Models\\Shop',
+            'association' => 'App\\Models\\Association',
+        ];
+
+        if (isset($typeMap[$type])) {
+            return $query->where('newable_type', $typeMap[$type]);
+        }
+
+        return $query;
     }
 }

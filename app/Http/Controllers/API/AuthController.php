@@ -513,7 +513,7 @@ class AuthController extends Controller
 
         try {
             if ($user->avatar) {
-                $oldPath = str_replace(['https://apiapk.tudealer.app/', 'http://192.168.203.82:8000/'], '', $user->avatar);
+                $oldPath = str_replace(['https://apiapk.tudealer.app/', 'http://10.23.248.82:8000/'], '', $user->avatar);
                 $fullPath = '/home1/icjmeomy/apiapk.tudealer.app/public/' . $oldPath;
                 if (file_exists($fullPath)) {
                     unlink($fullPath);
@@ -533,7 +533,7 @@ class AuthController extends Controller
             $isDevelopment = env('APP_ENV') === 'local' || env('APP_ENV') === 'development';
             
             if ($isDevelopment) {
-                $avatarUrl = 'http://192.168.203.82:8000/imagenes_app/avatars/' . $filename;
+                $avatarUrl = 'http://10.23.248.82:8000/imagenes_app/avatars/' . $filename;
             } else {
                 $avatarUrl = 'https://apiapk.tudealer.app/imagenes_app/avatars/' . $filename;
             }
@@ -598,7 +598,7 @@ class AuthController extends Controller
 
         try {
             if ($user->avatar) {
-                $oldPath = str_replace(['https://apiapk.tudealer.app/', 'http://192.168.203.82:8000/'], '', $user->avatar);
+                $oldPath = str_replace(['https://apiapk.tudealer.app/', 'http://10.23.248.82:8000/'], '', $user->avatar);
                 $fullPath = '/home1/icjmeomy/apiapk.tudealer.app/public/' . $oldPath;
                 if (file_exists($fullPath)) {
                     unlink($fullPath);

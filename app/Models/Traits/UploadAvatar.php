@@ -10,12 +10,6 @@ trait UploadAvatar
 {
     /**
      * Subir avatar al servidor (SOLO PARA USER)
-     * 
-     * @param Request $request
-     * @param \App\Models\User $user
-     * @param string $folder - 'avatars'
-     * @param string $fieldName - 'avatar'
-     * @return \Illuminate\Http\JsonResponse
      */
     protected function uploadAvatarToProduction(Request $request, $user, string $folder = 'avatars', string $fieldName = 'avatar')
     {
@@ -28,7 +22,7 @@ trait UploadAvatar
             }
 
             $file = $request->file($fieldName);
-            
+
             if (!$file->isValid() || !in_array($file->getMimeType(), ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'])) {
                 return response()->json([
                     'success' => false,
@@ -37,16 +31,16 @@ trait UploadAvatar
             }
 
             $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
-            
+
             $isDevelopment = env('APP_ENV') === 'local' || env('APP_ENV') === 'development';
-            
+
             if ($isDevelopment) {
                 $destinationPath = public_path('imagenes_app/' . $folder);
                 if (!file_exists($destinationPath)) {
                     mkdir($destinationPath, 0755, true);
                 }
                 $file->move($destinationPath, $filename);
-                $baseUrl = env('APP_URL', 'http://192.168.203.82:8000');
+                $baseUrl = 'http://10.23.248.82:8000';
                 $avatarUrl = $baseUrl . '/imagenes_app/' . $folder . '/' . $filename;
             } else {
                 $destinationPath = '/home1/icjmeomy/apiapk.tudealer.app/public/imagenes_app/' . $folder;
@@ -54,26 +48,26 @@ trait UploadAvatar
                     mkdir($destinationPath, 0755, true);
                 }
                 $file->move($destinationPath, $filename);
-                $baseUrl = env('APP_URL', 'https://apiapk.tudealer.app');
+                $baseUrl = 'https://apiapk.tudealer.app';
                 $avatarUrl = $baseUrl . '/imagenes_app/' . $folder . '/' . $filename;
             }
-            
+
             // ✅ Eliminar avatar anterior
             if ($user->$fieldName) {
                 $this->deleteAvatarFromProduction($user->$fieldName);
             }
-            
+
             // ✅ ACTUALIZAR AVATAR DEL USUARIO
             $user->update([$fieldName => $avatarUrl]);
-            
+
             // ✅ TAMBIÉN ACTUALIZAR LA IMAGEN DEL PERFIL (doctor, lawyer, shop, association)
             $this->updateProfileImage($user, $avatarUrl);
-            
+
             Log::info('✅ Avatar subido correctamente', [
                 'user_id' => $user->id,
                 'url' => $avatarUrl,
             ]);
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Avatar actualizado correctamente',
@@ -82,7 +76,7 @@ trait UploadAvatar
                     'avatar' => $avatarUrl,
                 ]
             ], 200);
-            
+
         } catch (Exception $e) {
             Log::error('❌ Error al subir avatar: ' . $e->getMessage());
             return response()->json([
@@ -102,17 +96,17 @@ trait UploadAvatar
             $user->doctor->update(['image' => $imageUrl]);
             Log::info('🔄 Imagen de doctor sincronizada', ['doctor_id' => $user->doctor->id]);
         }
-        
+
         if ($user->lawyer) {
             $user->lawyer->update(['image' => $imageUrl]);
             Log::info('🔄 Imagen de abogado sincronizada', ['lawyer_id' => $user->lawyer->id]);
         }
-        
+
         if ($user->shop) {
             $user->shop->update(['image' => $imageUrl]);
             Log::info('🔄 Imagen de tienda sincronizada', ['shop_id' => $user->shop->id]);
         }
-        
+
         if ($user->association) {
             $user->association->update(['image' => $imageUrl]);
             Log::info('🔄 Imagen de asociación sincronizada', ['association_id' => $user->association->id]);
@@ -125,29 +119,29 @@ trait UploadAvatar
     protected function deleteAvatarFromProduction(?string $avatarUrl)
     {
         if (!$avatarUrl) return;
-        
+
         try {
             $isDevelopment = env('APP_ENV') === 'local' || env('APP_ENV') === 'development';
             $cleanUrl = explode('?', $avatarUrl)[0];
-            
+
             if ($isDevelopment) {
-                $baseUrl = env('APP_URL', 'http://192.168.203.82:8000');
+                $baseUrl = 'http://10.23.248.82:8000';
                 $relativePath = str_replace($baseUrl, '', $cleanUrl);
                 $relativePath = ltrim($relativePath, '/');
                 $fullPath = public_path($relativePath);
             } else {
-                $baseUrl = env('APP_URL', 'https://apiapk.tudealer.app');
+                $baseUrl = 'https://apiapk.tudealer.app';
                 $relativePath = str_replace($baseUrl, '', $cleanUrl);
                 $relativePath = ltrim($relativePath, '/');
                 $fullPath = '/home1/icjmeomy/apiapk.tudealer.app/public/' . $relativePath;
             }
-            
+
             if (file_exists($fullPath)) {
                 unlink($fullPath);
                 Log::info('✅ Avatar eliminado: ' . $fullPath);
                 return true;
             }
-            
+
             return false;
         } catch (Exception $e) {
             Log::error('❌ Error al eliminar avatar: ' . $e->getMessage());
@@ -164,12 +158,12 @@ trait UploadAvatar
         if (filter_var($avatarPath, FILTER_VALIDATE_URL)) {
             return $avatarPath;
         }
-        
+
         $isDevelopment = env('APP_ENV') === 'local' || env('APP_ENV') === 'development';
-        $baseUrl = $isDevelopment 
-            ? env('APP_URL', 'http://192.168.203.82:8000')
-            : env('APP_URL', 'https://apiapk.tudealer.app');
-        
+        $baseUrl = $isDevelopment
+            ? 'http://10.23.248.82:8000'
+            : 'https://apiapk.tudealer.app';
+
         return $baseUrl . '/' . ltrim($avatarPath, '/');
     }
 }
