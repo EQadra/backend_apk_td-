@@ -35,16 +35,13 @@ class AuthController extends Controller
 
         $credentials = $request->only('email', 'password');
 
-        // ✅ CONFIGURAR TTL SEGÚN REMEMBER ME
         $ttl = config('jwt.ttl', 1440);
-        
-        // ✅ SI EL USUARIO MARCA "REMEMBER ME", AUMENTAR EL TTL
+
         $rememberMe = $request->boolean('remember_me', true);
         if ($rememberMe) {
-            $ttl = 43200; // 30 días
+            $ttl = 43200;
         }
 
-        // ✅ CAMBIAR EL TTL ANTES DE AUTENTICAR
         auth()->factory()->setTTL($ttl);
 
         if (!$token = auth()->attempt($credentials)) {
@@ -82,9 +79,9 @@ class AuthController extends Controller
     }
 
     /* =======================
-     | REGISTER CON CAMPO SEXO (LGBT+ INCLUIDO)
+     | REGISTER
      ======================= */
-    
+
     public function register(Request $request)
     {
         Log::info('📝 REGISTRO INICIADO', [
@@ -93,7 +90,6 @@ class AuthController extends Controller
             'sexo' => $request->sexo ?? 'no_especificado',
         ]);
 
-        // ✅ VALIDACIÓN CON SEXO (INCLUYE LGBT+)
         $request->validate([
             'name'     => 'required|string|max:255',
             'email'    => 'required|email|unique:users,email',
@@ -104,7 +100,6 @@ class AuthController extends Controller
             'sexo'     => 'nullable|string|in:masculino,femenino,lgbt,otro,no_especificado',
         ]);
 
-        // ✅ 1. CREAR USUARIO CON SEXO Y AVATAR
         $userData = [
             'name' => $request->name,
             'email' => $request->email,
@@ -123,9 +118,7 @@ class AuthController extends Controller
             'sexo' => $user->sexo,
         ]);
 
-        // ✅ 2. CREAR PERFIL SEGÚN ROL CON SEXO
         if ($request->licencia) {
-            // ✅ ABOGADO
             $lawyerData = [
                 'user_id'     => $user->id,
                 'first_name'  => $request->first_name ?? $request->name,
@@ -136,19 +129,18 @@ class AuthController extends Controller
                 'image'       => $request->avatar,
                 'sexo'        => $request->sexo ?? 'no_especificado',
             ];
-            
+
             if ($request->specialty) $lawyerData['specialty'] = $request->specialty;
             if ($request->city) $lawyerData['city'] = $request->city;
             if ($request->university) $lawyerData['university'] = $request->university;
             if ($request->description) $lawyerData['description'] = $request->description;
             if ($request->schedule) $lawyerData['schedule'] = $request->schedule;
-            
+
             Lawyer::create($lawyerData);
             $user->assignRole('lawyer');
             Log::info('✅ PERFIL ABOGADO CREADO', ['user_id' => $user->id]);
-        } 
+        }
         elseif ($request->codigoDoctor) {
-            // ✅ DOCTOR
             $doctorData = [
                 'user_id'         => $user->id,
                 'first_name'      => $request->first_name ?? $request->name,
@@ -162,18 +154,17 @@ class AuthController extends Controller
                 'image'           => $request->avatar,
                 'sexo'            => $request->sexo ?? 'no_especificado',
             ];
-            
+
             if ($request->city) $doctorData['city'] = $request->city;
             if ($request->university) $doctorData['university'] = $request->university;
             if ($request->description) $doctorData['description'] = $request->description;
             if ($request->schedule) $doctorData['schedule'] = $request->schedule;
-            
+
             Doctor::create($doctorData);
             $user->assignRole('doctor');
             Log::info('✅ PERFIL DOCTOR CREADO', ['user_id' => $user->id]);
-        } 
+        }
         elseif ($request->ruc) {
-            // ✅ ASOCIACIÓN o TIENDA
             if ($request->type === 'asociacion') {
                 Association::create([
                     'user_id' => $user->id,
@@ -208,18 +199,14 @@ class AuthController extends Controller
                 Log::info('✅ PERFIL TIENDA CREADO', ['user_id' => $user->id]);
             }
         } else {
-            // ✅ USUARIO NORMAL
             $user->assignRole('user');
             Log::info('✅ USUARIO NORMAL CREADO', ['user_id' => $user->id]);
         }
 
-        // ✅ 3. GENERAR TOKEN
         $token = Auth::guard('api')->login($user);
 
-        // ✅ 4. CARGAR RELACIONES
         $user->load(['doctor', 'lawyer', 'association', 'shop']);
 
-        // ✅ 5. FORMATEAR RESPUESTA
         $formattedUser = $this->formatUserResponse($user);
 
         Log::info('🎉 REGISTRO COMPLETADO', [
@@ -238,7 +225,7 @@ class AuthController extends Controller
     }
 
     /* =======================
-     | ME - OBTENER USUARIO
+     | ME - OBTENER USUARIO (TODOS LOS ROLES CON DATA COMPLETA)
      ======================= */
 
     public function me()
@@ -253,7 +240,7 @@ class AuthController extends Controller
             }
 
             $userData = $user->toArray();
-            
+
             $userData['phone'] = $user->phone ?? '';
             $userData['dni'] = $user->dni ?? '';
             $userData['address'] = $user->address ?? '';
@@ -262,22 +249,66 @@ class AuthController extends Controller
             $userData['avatar_url'] = $user->avatar_url;
 
             $user->load(['doctor', 'lawyer', 'association', 'shop']);
-            
+
             if ($user->doctor) {
+                // ✅ DOCTOR: services + posts + feedbacks + news
+                $doctor = $user->doctor->load([
+                    'services',
+                    'posts.comments',
+                    'feedbacks.user',
+                    'news',
+                    'favorites',
+                    'histories',
+                ]);
                 $userData['profile_type'] = 'doctor';
-                $userData['profile'] = $user->doctor;
+                $userData['profile'] = $doctor;
             } elseif ($user->lawyer) {
+                // ✅ LAWYER: services + posts + feedbacks + news
+                $lawyer = $user->lawyer->load([
+                    'services',
+                    'posts.comments',
+                    'feedbacks.user',
+                    'news',
+                    'favorites',
+                    'histories',
+                ]);
                 $userData['profile_type'] = 'lawyer';
-                $userData['profile'] = $user->lawyer;
+                $userData['profile'] = $lawyer;
             } elseif ($user->association) {
+                // ✅ ASSOCIATION: products + services + posts + feedbacks + news
+                $association = $user->association->load([
+                    'products',
+                    'services',
+                    'posts.comments',
+                    'feedbacks.user',
+                    'news',
+                    'favorites',
+                    'histories',
+                ]);
                 $userData['profile_type'] = 'association';
-                $userData['profile'] = $user->association;
+                $userData['profile'] = $association;
             } elseif ($user->shop) {
+                // ✅ SHOP: products + services + posts + feedbacks + news
+                $shop = $user->shop->load([
+                    'products',
+                    'services',
+                    'posts.comments',
+                    'feedbacks.user',
+                    'news',
+                    'favorites',
+                    'histories',
+                ]);
                 $userData['profile_type'] = 'shop';
-                $userData['profile'] = $user->shop;
+                $userData['profile'] = $shop;
             } else {
+                // ✅ USER normal: posts + feedbacks + favorites + histories
                 $userData['profile_type'] = 'user';
                 $userData['profile'] = null;
+
+                $userData['posts'] = $user->posts()->with('comments')->latest()->get();
+                $userData['feedbacks'] = $user->feedbacks()->with('user')->latest()->get();
+                $userData['favorites'] = $user->favorites;
+                $userData['histories'] = $user->histories;
             }
 
             return response()->json($userData);
@@ -301,14 +332,13 @@ class AuthController extends Controller
     }
 
     /* =======================
-     | REFRESH TOKEN - CORREGIDO
+     | REFRESH TOKEN
      ======================= */
     public function refresh(Request $request)
     {
         try {
-            // ✅ VERIFICAR QUE EL TOKEN EXISTA
             $token = $request->bearerToken();
-            
+
             if (!$token) {
                 Log::warning('⚠️ Token no proporcionado para refresh');
                 return response()->json([
@@ -316,10 +346,8 @@ class AuthController extends Controller
                 ], 401);
             }
 
-            // ✅ ESTABLECER EL TOKEN
             auth()->setToken($token);
-            
-            // ✅ VERIFICAR QUE EL TOKEN SEA VÁLIDO
+
             if (!auth()->check()) {
                 Log::warning('⚠️ Token inválido para refresh');
                 return response()->json([
@@ -327,22 +355,18 @@ class AuthController extends Controller
                 ], 401);
             }
 
-            // ✅ OBTENER USUARIO
             $user = auth()->user();
-            
+
             if (!$user) {
                 return response()->json([
                     'message' => 'Usuario no encontrado'
                 ], 404);
             }
 
-            // ✅ REFRESCAR TOKEN
             $newToken = auth()->refresh();
 
-            // ✅ CARGAR RELACIONES
             $user->load(['doctor', 'lawyer', 'association', 'shop']);
 
-            // ✅ FORMATEAR RESPUESTA
             $formattedUser = $this->formatUserResponse($user);
 
             Log::info('✅ Token refrescado exitosamente', [
@@ -361,13 +385,13 @@ class AuthController extends Controller
             return response()->json([
                 'message' => 'Token expirado. Inicia sesión nuevamente.'
             ], 401);
-            
+
         } catch (TokenInvalidException $e) {
             Log::error('❌ Token inválido al refrescar', ['error' => $e->getMessage()]);
             return response()->json([
                 'message' => 'Token inválido. Inicia sesión nuevamente.'
             ], 401);
-            
+
         } catch (\Exception $e) {
             Log::error('❌ Error al refrescar token', [
                 'error' => $e->getMessage(),
@@ -451,7 +475,6 @@ class AuthController extends Controller
     /* =======================
      | ACTUALIZAR PERFIL
      ======================= */
-    
     public function updateProfile(Request $request)
     {
         $user = Auth::user();
@@ -496,7 +519,6 @@ class AuthController extends Controller
     /* =======================
      | ACTUALIZAR AVATAR
      ======================= */
-    
     public function updateAvatar(Request $request)
     {
         $request->validate([
@@ -512,9 +534,23 @@ class AuthController extends Controller
         }
 
         try {
+            $oldPath = null;
+
             if ($user->avatar) {
-                $oldPath = str_replace(['https://apiapk.tudealer.app/', 'http://10.23.248.82:8000/'], '', $user->avatar);
-                $fullPath = '/home1/icjmeomy/apiapk.tudealer.app/public/' . $oldPath;
+                $oldPath = str_replace(
+                    ['https://apiapk.tudealer.app/', 'http://10.23.248.82:8000/'],
+                    '',
+                    $user->avatar
+                );
+
+                $isDevelopment = env('APP_ENV') === 'local' || env('APP_ENV') === 'development';
+
+                if ($isDevelopment) {
+                    $fullPath = public_path($oldPath);
+                } else {
+                    $fullPath = '/home1/icjmeomy/apiapk.tudealer.app/public/' . $oldPath;
+                }
+
                 if (file_exists($fullPath)) {
                     unlink($fullPath);
                 }
@@ -522,27 +558,31 @@ class AuthController extends Controller
 
             $file = $request->file('avatar');
             $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
-            $destinationPath = '/home1/icjmeomy/apiapk.tudealer.app/public/imagenes_app/avatars';
-            
-            if (!file_exists($destinationPath)) {
-                mkdir($destinationPath, 0755, true);
-            }
-            
-            $file->move($destinationPath, $filename);
-            
+
             $isDevelopment = env('APP_ENV') === 'local' || env('APP_ENV') === 'development';
-            
+
             if ($isDevelopment) {
+                $destinationPath = public_path('imagenes_app/avatars');
+                if (!file_exists($destinationPath)) {
+                    mkdir($destinationPath, 0755, true);
+                }
+                $file->move($destinationPath, $filename);
                 $avatarUrl = 'http://10.23.248.82:8000/imagenes_app/avatars/' . $filename;
             } else {
+                $destinationPath = '/home1/icjmeomy/apiapk.tudealer.app/public/imagenes_app/avatars';
+                if (!file_exists($destinationPath)) {
+                    mkdir($destinationPath, 0755, true);
+                }
+                $file->move($destinationPath, $filename);
                 $avatarUrl = 'https://apiapk.tudealer.app/imagenes_app/avatars/' . $filename;
             }
-            
+
             $user->update(['avatar' => $avatarUrl]);
 
-            // ✅ También actualizar la imagen del perfil si existe
+            // ✅ Sincronizar imagen del perfil (doctor, lawyer, association, shop)
             $this->updateProfileImage($user, $avatarUrl);
 
+            $user->refresh();
             $user->load(['doctor', 'lawyer', 'association', 'shop']);
 
             $formattedUser = $this->formatUserResponse($user);
@@ -585,7 +625,6 @@ class AuthController extends Controller
     /* =======================
      | ELIMINAR AVATAR
      ======================= */
-    
     public function deleteAvatar(Request $request)
     {
         $user = Auth::user();
@@ -598,8 +637,20 @@ class AuthController extends Controller
 
         try {
             if ($user->avatar) {
-                $oldPath = str_replace(['https://apiapk.tudealer.app/', 'http://10.23.248.82:8000/'], '', $user->avatar);
-                $fullPath = '/home1/icjmeomy/apiapk.tudealer.app/public/' . $oldPath;
+                $oldPath = str_replace(
+                    ['https://apiapk.tudealer.app/', 'http://10.23.248.82:8000/'],
+                    '',
+                    $user->avatar
+                );
+
+                $isDevelopment = env('APP_ENV') === 'local' || env('APP_ENV') === 'development';
+
+                if ($isDevelopment) {
+                    $fullPath = public_path($oldPath);
+                } else {
+                    $fullPath = '/home1/icjmeomy/apiapk.tudealer.app/public/' . $oldPath;
+                }
+
                 if (file_exists($fullPath)) {
                     unlink($fullPath);
                 }
@@ -607,7 +658,6 @@ class AuthController extends Controller
 
             $user->update(['avatar' => null]);
 
-            // ✅ También eliminar la imagen del perfil
             if ($user->doctor) {
                 $user->doctor->update(['image' => null]);
             } elseif ($user->lawyer) {
@@ -639,31 +689,73 @@ class AuthController extends Controller
     }
 
     /* =======================
-     | 🔥 FORMATO DE RESPUESTA DEL USUARIO
+     | FORMATO DE RESPUESTA DEL USUARIO (TODOS LOS ROLES)
      ======================= */
-    
     private function formatUserResponse($user)
     {
         $userData = $user->toArray();
 
         if ($user->doctor) {
+            // ✅ DOCTOR con data completa
+            $doctor = $user->doctor->load([
+                'services',
+                'posts.comments',
+                'feedbacks.user',
+                'news',
+                'favorites',
+                'histories',
+            ]);
             $userData['profile_type'] = 'doctor';
-            $userData['profile'] = $user->doctor->toArray();
+            $userData['profile'] = $doctor->toArray();
             if (isset($userData['profile']['formatted_phone'])) {
                 $userData['profile']['formatted_phone'] = $user->doctor->formatted_phone;
             }
         } elseif ($user->lawyer) {
+            // ✅ LAWYER con data completa
+            $lawyer = $user->lawyer->load([
+                'services',
+                'posts.comments',
+                'feedbacks.user',
+                'news',
+                'favorites',
+                'histories',
+            ]);
             $userData['profile_type'] = 'lawyer';
-            $userData['profile'] = $user->lawyer->toArray();
+            $userData['profile'] = $lawyer->toArray();
         } elseif ($user->association) {
+            // ✅ ASSOCIATION con data completa
+            $association = $user->association->load([
+                'products',
+                'services',
+                'posts.comments',
+                'feedbacks.user',
+                'news',
+                'favorites',
+                'histories',
+            ]);
             $userData['profile_type'] = 'association';
-            $userData['profile'] = $user->association->toArray();
+            $userData['profile'] = $association->toArray();
         } elseif ($user->shop) {
+            // ✅ SHOP con data completa
+            $shop = $user->shop->load([
+                'products',
+                'services',
+                'posts.comments',
+                'feedbacks.user',
+                'news',
+                'favorites',
+                'histories',
+            ]);
             $userData['profile_type'] = 'shop';
-            $userData['profile'] = $user->shop->toArray();
+            $userData['profile'] = $shop->toArray();
         } else {
             $userData['profile_type'] = 'user';
             $userData['profile'] = null;
+
+            $userData['posts'] = $user->posts()->with('comments')->latest()->get();
+            $userData['feedbacks'] = $user->feedbacks()->with('user')->latest()->get();
+            $userData['favorites'] = $user->favorites;
+            $userData['histories'] = $user->histories;
         }
 
         return $userData;

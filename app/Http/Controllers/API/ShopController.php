@@ -5,6 +5,8 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Models\Shop;
 use App\Models\Traits\UploadImage;
+use App\Models\Traits\SyncsUserData;
+
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -12,7 +14,7 @@ use Exception;
 
 class ShopController extends Controller
 {
-    use UploadImage;
+    use UploadImage,SyncsUserData;
 
     /**
      * LISTADO
@@ -139,7 +141,7 @@ class ShopController extends Controller
     /**
      * ACTUALIZAR
      */
-    public function update(Request $request, $id)
+public function update(Request $request, $id)
     {
         $shop = Shop::findOrFail($id);
 
@@ -154,44 +156,24 @@ class ShopController extends Controller
             'address'     => 'nullable|string|max:255',
             'city'        => 'nullable|string|max:100',
             'phone'       => 'nullable|string|max:20',
-            'image'       => 'nullable|image|mimes:jpg,jpeg,png,webp|max:4096',
             'schedule'    => 'nullable|string|max:191',
         ]);
 
-        if ($request->hasFile('image')) {
-            $this->deleteImageFromProduction($shop->image);
-            
-            $file = $request->file('image');
-            $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
-            $destinationPath = '/home1/icjmeomy/apiapk.tudealer.app/public/imagenes_app/shops';
-            
-            if (!file_exists($destinationPath)) {
-                mkdir($destinationPath, 0755, true);
-            }
-            
-            $file->move($destinationPath, $filename);
-            $imageUrl = 'https://apiapk.tudealer.app/imagenes_app/shops/' . $filename;
-            
-            $shop->image = $imageUrl;
-        }
-
-        if ($request->has('image') && is_string($request->image)) {
-            $shop->image = $request->image;
-        }
-
         $shop->update($request->only([
-            'name',
-            'category',
-            'description',
-            'address',
-            'city',
-            'phone',
-            'schedule'
+            'name', 'category', 'description', 'address', 'city', 'phone', 'schedule'
         ]));
+
+        // ✅ Sincronizar con users
+        $this->syncUserData($shop, $request, [
+            'name'    => 'name',
+            'phone'   => 'phone',
+            'address' => 'address',
+            'city'    => 'city',
+        ]);
 
         return response()->json([
             'message' => 'Shop updated',
-            'data' => $shop
+            'data' => $shop->fresh()->load(['user', 'products', 'services', 'news'])
         ]);
     }
 

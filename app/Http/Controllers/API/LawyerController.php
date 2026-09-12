@@ -5,12 +5,14 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Models\Lawyer;
 use App\Models\Traits\UploadImage;
+use App\Models\Traits\SyncsUserData;
+
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class LawyerController extends Controller
 {
-    use UploadImage;
+    use UploadImage,SyncsUserData;
 
     public function index()
     {
@@ -100,7 +102,7 @@ class LawyerController extends Controller
         return response()->json($lawyer);
     }
 
-    public function update(Request $request, $id)
+ public function update(Request $request, $id)
     {
         $lawyer = Lawyer::findOrFail($id);
 
@@ -109,54 +111,46 @@ class LawyerController extends Controller
         }
 
         $request->validate([
-            'first_name' => 'sometimes|string|max:100',
-            'last_name' => 'sometimes|string|max:100',
-            'description' => 'nullable|string',
-            'specialty' => 'nullable|string|max:255',
+            'first_name'   => 'sometimes|string|max:100',
+            'last_name'    => 'sometimes|string|max:100',
+            'description'  => 'nullable|string',
+            'specialty'    => 'nullable|string|max:255',
             'license_code' => 'nullable|string|max:50',
-            'services' => 'nullable|string',
-            'city' => 'nullable|string|max:100',
-            'university' => 'nullable|string|max:255',
-            'image' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:4096',
-            'schedule' => 'nullable|string',
+            'city'         => 'nullable|string|max:100',
+            'university'   => 'nullable|string|max:255',
+            'schedule'     => 'nullable|string',
+            'phone'        => 'nullable|string|max:20',
+            'office_phone' => 'nullable|string|max:20',
         ]);
 
-        if ($request->hasFile('image')) {
-            $this->deleteImageFromProduction($lawyer->image);
-            
-            $file = $request->file('image');
-            $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
-            $destinationPath = '/home1/icjmeomy/apiapk.tudealer.app/public/imagenes_app/lawyers';
-            
-            if (!file_exists($destinationPath)) {
-                mkdir($destinationPath, 0755, true);
-            }
-            
-            $file->move($destinationPath, $filename);
-            $imageUrl = 'https://apiapk.tudealer.app/imagenes_app/lawyers/' . $filename;
-            
-            $lawyer->image = $imageUrl;
-        }
-
-        if ($request->has('image') && is_string($request->image)) {
-            $lawyer->image = $request->image;
-        }
-
         $lawyer->update($request->only([
-            'first_name',
-            'last_name',
-            'description',
-            'specialty',
-            'license_code',
-            'services',
-            'city',
-            'university',
-            'schedule',
+            'first_name', 'last_name', 'description', 'specialty', 'license_code',
+            'city', 'university', 'schedule', 'phone', 'office_phone',
         ]));
 
+        // ✅ Sincronizar con users
+        $this->syncUserData($lawyer, $request, [
+            'phone' => 'phone',
+            'city'  => 'city',
+        ]);
+
+        // ✅ El name del user = first_name + last_name
+        $user = $lawyer->user;
+        if ($user) {
+            $firstName = $request->first_name ?? $lawyer->first_name;
+            $lastName  = $request->last_name  ?? $lawyer->last_name;
+            $userName  = trim("$firstName $lastName");
+
+            if ($userName && $userName !== $user->name) {
+                $user->update(['name' => $userName]);
+            }
+        }
+
         return response()->json([
-            'message' => 'Lawyer updated.',
-            'data' => $lawyer
+            'message' => 'Abogado actualizado correctamente',
+            'data' => $lawyer->fresh()->load([
+                'user', 'feedbacks.user', 'posts.comments', 'services', 'news'
+            ])
         ]);
     }
 

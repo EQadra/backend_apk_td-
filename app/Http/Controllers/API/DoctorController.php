@@ -5,14 +5,16 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Models\Doctor;
 use App\Models\Traits\UploadImage;
+use App\Models\Traits\SyncsUserData;
+
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 
 class DoctorController extends Controller
 {
-    use UploadImage;
-    
+    use UploadImage,SyncsUserData;
+
     /**
      * LISTADO
      */
@@ -22,7 +24,8 @@ class DoctorController extends Controller
             'user',
             'feedbacks.user',
             'posts.comments',
-            'services'
+            'services',
+            'news',
         ])
         ->latest()
         ->get();
@@ -51,33 +54,33 @@ class DoctorController extends Controller
         ]);
 
         $doctor = Doctor::create([
-            'user_id'        => Auth::id(),
-            'first_name'     => $request->first_name,
-            'last_name'      => $request->last_name,
-            'description'    => $request->description,
-            'career'         => $request->career,
-            'specialty'      => $request->specialty,
-            'graduate_code'  => $request->graduate_code,
-            'services'       => $request->services,
-            'city'           => $request->city,
-            'university'     => $request->university,
-            'schedule'       => $request->schedule,
-            'phone'          => $request->phone,
+            'user_id'         => Auth::id(),
+            'first_name'      => $request->first_name,
+            'last_name'       => $request->last_name,
+            'description'     => $request->description,
+            'career'          => $request->career,
+            'specialty'       => $request->specialty,
+            'graduate_code'   => $request->graduate_code,
+            'services'        => $request->services,
+            'city'            => $request->city,
+            'university'      => $request->university,
+            'schedule'        => $request->schedule,
+            'phone'           => $request->phone,
             'emergency_phone' => $request->emergency_phone,
-            'clinic_phone'   => $request->clinic_phone,
+            'clinic_phone'    => $request->clinic_phone,
         ]);
 
-        // Si hay imagen, subirla
+        // ✅ Subir imagen con el trait
         if ($request->hasFile('image')) {
             $this->uploadImageToProduction($request, $doctor, 'doctors');
         }
 
-        // Cargar relaciones
         $doctor->load([
             'user',
             'feedbacks.user',
             'posts.comments',
-            'services'
+            'services',
+            'news',
         ]);
 
         return response()->json([
@@ -93,16 +96,17 @@ class DoctorController extends Controller
     {
         return Doctor::with([
             'user',
-            'feedbacks',
-            'posts',
-            'services'
+            'feedbacks.user',
+            'posts.comments',
+            'services',
+            'news',
         ])->findOrFail($id);
     }
 
     /**
      * ACTUALIZAR
      */
-    public function update(Request $request, $id)
+ public function update(Request $request, $id)
     {
         $doctor = Doctor::findOrFail($id);
 
@@ -120,50 +124,41 @@ class DoctorController extends Controller
             'services'        => 'nullable|string',
             'city'            => 'nullable|string|max:100',
             'university'      => 'nullable|string|max:255',
-            'image'           => 'nullable|image|mimes:jpg,jpeg,png,webp|max:4096',
             'schedule'        => 'nullable|string',
             'phone'           => 'nullable|string|max:20',
             'emergency_phone' => 'nullable|string|max:20',
             'clinic_phone'    => 'nullable|string|max:20',
         ]);
 
-        // Actualizar datos
         $doctor->update($request->only([
-            'first_name',
-            'last_name',
-            'description',
-            'career',
-            'specialty',
-            'graduate_code',
-            'services',
-            'city',
-            'university',
-            'schedule',
-            'phone',
-            'emergency_phone',
-            'clinic_phone',
+            'first_name', 'last_name', 'description', 'career', 'specialty',
+            'graduate_code', 'services', 'city', 'university', 'schedule',
+            'phone', 'emergency_phone', 'clinic_phone',
         ]));
 
-        // Si hay nueva imagen, subirla
-        if ($request->hasFile('image')) {
-            // Eliminar imagen anterior si existe
-            if ($doctor->image) {
-                $this->deleteImageFromProduction($doctor->image);
-            }
-            $this->uploadImageToProduction($request, $doctor, 'doctors');
-        }
-
-        // Cargar relaciones
-        $doctor->load([
-            'user',
-            'feedbacks.user',
-            'posts.comments',
-            'services'
+        // ✅ Sincronizar con users
+        $this->syncUserData($doctor, $request, [
+            'phone' => 'phone',
+            'city'  => 'city',
         ]);
+
+        // ✅ El name del user = first_name + last_name
+        $user = $doctor->user;
+        if ($user) {
+            $firstName = $request->first_name ?? $doctor->first_name;
+            $lastName  = $request->last_name  ?? $doctor->last_name;
+            $userName  = trim("$firstName $lastName");
+
+            if ($userName && $userName !== $user->name) {
+                $user->update(['name' => $userName]);
+            }
+        }
 
         return response()->json([
             'message' => 'Doctor actualizado correctamente',
-            'data' => $doctor
+            'data' => $doctor->fresh()->load([
+                'user', 'feedbacks.user', 'posts.comments', 'services', 'news'
+            ])
         ]);
     }
 
@@ -174,9 +169,12 @@ class DoctorController extends Controller
     {
         return Doctor::with([
             'user',
-            'feedbacks',
-            'posts',
-            'services'
+            'feedbacks.user',
+            'posts.comments',
+            'services',
+            'news',
+            'favorites',
+            'histories',
         ])
         ->where('user_id', Auth::id())
         ->firstOrFail();
@@ -190,8 +188,9 @@ class DoctorController extends Controller
         return Doctor::with([
             'user',
             'feedbacks.user',
-            'posts',
-            'services'
+            'posts.comments',
+            'services',
+            'news',
         ])
         ->latest()
         ->take(10)
@@ -219,8 +218,8 @@ class DoctorController extends Controller
     }
 
     /**
-     * ACTUALIZAR IMAGEN - CORREGIDO
-     * 
+     * ACTUALIZAR IMAGEN
+     *
      * POST /api/doctors/update-image
      */
     public function updateImage(Request $request)
@@ -228,41 +227,48 @@ class DoctorController extends Controller
         try {
             $doctor = Doctor::where('user_id', Auth::id())->firstOrFail();
 
-            // Usar el trait para subir la imagen
+            // ✅ Usa el trait para subir (ya elimina la anterior automáticamente)
             $response = $this->uploadImageToProduction(
                 $request,
                 $doctor,
                 'doctors'
             );
 
-            // Si la respuesta es un JsonResponse, extraer los datos
             if ($response instanceof \Illuminate\Http\JsonResponse) {
                 $content = $response->getData();
-                
-                // Verificar si fue exitoso
+
                 if (isset($content->success) && $content->success) {
-                    // Obtener la URL de la imagen
                     $imageUrl = $content->data->image_url ?? $content->data->image ?? null;
-                    
+
                     if ($imageUrl) {
-                        // Recargar el doctor con relaciones
+                        // ✅ Sincronizar con users.avatar
+                        $user = Auth::user();
+                        if ($user) {
+                            if ($user->avatar && $user->avatar !== $imageUrl) {
+                                $this->deleteImageFromProduction($user->avatar);
+                            }
+                            $user->update(['avatar' => $imageUrl]);
+                        }
+
                         $doctor->refresh();
                         $doctor->load([
                             'user',
                             'feedbacks.user',
                             'posts.comments',
-                            'services'
+                            'services',
+                            'news',
                         ]);
-                        
+
                         return response()->json([
                             'success' => true,
                             'message' => 'Imagen actualizada correctamente',
                             'data' => $doctor,
-                            'image' => $imageUrl
+                            'image' => $imageUrl,
+                            'avatar' => $imageUrl
                         ], 200);
                     }
                 }
-                
+
                 return $response;
             }
 
@@ -288,16 +294,17 @@ class DoctorController extends Controller
     public function search(Request $request)
     {
         $query = $request->get('q');
-        
+
         if (empty($query)) {
             return response()->json([]);
         }
 
         $doctors = Doctor::with([
             'user',
-            'services'
+            'services',
+            'news',
         ])
-        ->where(function($q) use ($query) {
+        ->where(function ($q) use ($query) {
             $q->where('first_name', 'LIKE', "%{$query}%")
               ->orWhere('last_name', 'LIKE', "%{$query}%")
               ->orWhereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$query}%"])
@@ -313,8 +320,8 @@ class DoctorController extends Controller
     }
 
     /**
-     * OBTENER IMAGEN DEL DOCTOR (para forzar actualización)
-     * 
+     * OBTENER IMAGEN DEL DOCTOR
+     *
      * GET /api/doctors/image
      */
     public function getImage(Request $request)
@@ -324,9 +331,7 @@ class DoctorController extends Controller
 
             $imageUrl = $doctor->image;
 
-            // Si la imagen existe, agregar timestamp para evitar caché
             if ($imageUrl) {
-                // Verificar si la URL ya tiene parámetros
                 $separator = strpos($imageUrl, '?') !== false ? '&' : '?';
                 $imageUrl = $imageUrl . $separator . 't=' . time();
             }

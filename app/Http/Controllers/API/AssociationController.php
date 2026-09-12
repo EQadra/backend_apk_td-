@@ -5,16 +5,18 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Models\Association;
 use App\Models\Traits\UploadImage;
+use App\Models\Traits\SyncsUserData;
+
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Validator; // ✅ AGREGADO
+use Illuminate\Support\Facades\Validator;
 use Exception;
 
 class AssociationController extends Controller
 {
-    use UploadImage;
-    
+    use UploadImage, SyncsUserData;
+
     /**
      * LISTADO
      */
@@ -25,14 +27,15 @@ class AssociationController extends Controller
                 'user',
                 'feedbacks',
                 'products',
-                'posts.comments'
+                'services',
+                'posts.comments',
+                'news',
             ])
             ->latest()
             ->paginate(10);
 
         } catch (Exception $e) {
             Log::error($e->getMessage());
-
             return response()->json([
                 'message' => 'Error loading associations'
             ], 500);
@@ -49,7 +52,11 @@ class AssociationController extends Controller
                 'user',
                 'feedbacks.user',
                 'posts.comments',
-                'products'
+                'products',
+                'services',
+                'news',
+                'favorites',
+                'histories',
             ])
             ->where('user_id', Auth::id())
             ->firstOrFail();
@@ -93,18 +100,27 @@ class AssociationController extends Controller
 
         $imageUrl = null;
 
-        // ✅ MANEJO DE IMAGEN CORREGIDO
         if ($request->hasFile('image')) {
             $file = $request->file('image');
             $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
-            $destinationPath = '/home1/icjmeomy/apiapk.tudealer.app/public/imagenes_app/associations';
-            
-            if (!file_exists($destinationPath)) {
-                mkdir($destinationPath, 0755, true);
+
+            $isDevelopment = env('APP_ENV') === 'local' || env('APP_ENV') === 'development';
+
+            if ($isDevelopment) {
+                $destinationPath = public_path('imagenes_app/associations');
+                if (!file_exists($destinationPath)) {
+                    mkdir($destinationPath, 0755, true);
+                }
+                $file->move($destinationPath, $filename);
+                $imageUrl = 'http://10.23.248.82:8000/imagenes_app/associations/' . $filename;
+            } else {
+                $destinationPath = '/home1/icjmeomy/apiapk.tudealer.app/public/imagenes_app/associations';
+                if (!file_exists($destinationPath)) {
+                    mkdir($destinationPath, 0755, true);
+                }
+                $file->move($destinationPath, $filename);
+                $imageUrl = 'https://apiapk.tudealer.app/imagenes_app/associations/' . $filename;
             }
-            
-            $file->move($destinationPath, $filename);
-            $imageUrl = 'https://apiapk.tudealer.app/imagenes_app/associations/' . $filename;
         } elseif ($request->has('image') && is_string($request->image)) {
             $imageUrl = $request->image;
         }
@@ -120,8 +136,19 @@ class AssociationController extends Controller
             'website'     => $request->website,
         ]);
 
-        return response()->json($association, 201);
-    }    
+        return response()->json([
+            'success' => true,
+            'message' => 'Association created',
+            'data' => $association->load([
+                'user',
+                'products',
+                'services',
+                'posts.comments',
+                'feedbacks.user',
+                'news',
+            ])
+        ], 201);
+    }
 
     /**
      * VER
@@ -132,8 +159,10 @@ class AssociationController extends Controller
             return Association::with([
                 'user',
                 'products',
+                'services',
                 'feedbacks.user',
-                'posts.comments'
+                'posts.comments',
+                'news',
             ])->findOrFail($id);
 
         } catch (Exception $e) {
@@ -144,9 +173,9 @@ class AssociationController extends Controller
     }
 
     /**
-     * ACTUALIZAR - ✅ CORREGIDO
+     * ACTUALIZAR
      */
-    public function update(Request $request, $id)
+ public function update(Request $request, $id)
     {
         $association = Association::findOrFail($id);
 
@@ -154,14 +183,12 @@ class AssociationController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        // ✅ VALIDACIÓN CORREGIDA
         $validator = Validator::make($request->all(), [
             'name'        => 'sometimes|string|max:255',
             'description' => 'nullable|string',
             'city'        => 'nullable|string|max:100',
             'address'     => 'nullable|string|max:255',
             'phone'       => 'nullable|string|max:20',
-            'image'       => 'nullable', // ✅ Acepta archivo o URL
             'website'     => 'nullable|string|max:255',
         ]);
 
@@ -172,47 +199,24 @@ class AssociationController extends Controller
             ], 422);
         }
 
-        // ✅ MANEJO DE IMAGEN CORREGIDO
-        if ($request->hasFile('image')) {
-            // Eliminar imagen anterior si existe
-            if ($association->image) {
-                $this->deleteImageFromProduction($association->image);
-            }
-            
-            $file = $request->file('image');
-            $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
-            $destinationPath = '/home1/icjmeomy/apiapk.tudealer.app/public/imagenes_app/associations';
-            
-            if (!file_exists($destinationPath)) {
-                mkdir($destinationPath, 0755, true);
-            }
-            
-            $file->move($destinationPath, $filename);
-            $imageUrl = 'https://apiapk.tudealer.app/imagenes_app/associations/' . $filename;
-            
-            $association->image = $imageUrl;
-        } elseif ($request->has('image') && is_string($request->image) && !empty($request->image)) {
-            // ✅ Si es URL string, guardar directamente
-            $association->image = $request->image;
-        }
-
-        // ✅ Actualizar campos normales
-        $association->update($request->only([
-            'name',
-            'description',
-            'city',
-            'address',
-            'phone',
-            'website'
+        $association->fill($request->only([
+            'name', 'description', 'city', 'address', 'phone', 'website'
         ]));
+        $association->save();
+
+        // ✅ Sincronizar con users
+        $this->syncUserData($association, $request, [
+            'name'    => 'name',
+            'phone'   => 'phone',
+            'address' => 'address',
+            'city'    => 'city',
+        ]);
 
         return response()->json([
+            'success' => true,
             'message' => 'Association updated',
             'data' => $association->fresh()->load([
-                'user',
-                'feedbacks.user',
-                'posts.comments',
-                'products'
+                'user', 'feedbacks.user', 'posts.comments', 'products', 'services', 'news'
             ])
         ]);
     }
@@ -245,6 +249,7 @@ class AssociationController extends Controller
         return Association::with([
             'user',
             'products',
+            'services',
             'feedbacks.user',
             'posts.comments',
             'news'
@@ -260,10 +265,10 @@ class AssociationController extends Controller
     public function updateImage(Request $request)
     {
         $association = Association::where('user_id', Auth::id())->firstOrFail();
-        
+
         return $this->uploadImageToProduction(
-            $request, 
-            $association, 
+            $request,
+            $association,
             'associations'
         );
     }
@@ -274,16 +279,19 @@ class AssociationController extends Controller
     public function search(Request $request)
     {
         $query = $request->get('q');
-        
+
         if (empty($query)) {
             return response()->json([]);
         }
 
         $associations = Association::with([
             'user',
-            'posts'
+            'products',
+            'services',
+            'posts',
+            'news',
         ])
-        ->where(function($q) use ($query) {
+        ->where(function ($q) use ($query) {
             $q->where('name', 'LIKE', "%{$query}%")
               ->orWhere('description', 'LIKE', "%{$query}%")
               ->orWhere('address', 'LIKE', "%{$query}%")
